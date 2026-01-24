@@ -1,11 +1,8 @@
 # uvid
-
 uvid is a simple Bash script that provides a way to log entries with some metadata (text, source, and author) along with a timestamp. The log entries are saved in a year-specific log file.
 
 ## Usage
-
 Save the `uvid` script in your preferred location and make sure it has executable permissions:
-
 ```bash
 chmod +x uvid.sh
 ```
@@ -32,3 +29,9 @@ The script creates a new log file named `uvid_<year>.log` in the current directo
 The above command will create a log entry like this in `uvid_<year>.log`:
 
 > [timestamp] This is an example entry. [John Doe] (My Blog)
+
+## Tips
+If your source or author contains spaces, make sure to enclose them in quotes when providing the arguments:
+```bash
+./uvid.sh -s "My Blog with spaces" -a "John O'Reilly" "This is an example entry."
+```
