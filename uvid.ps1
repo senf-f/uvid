@@ -19,7 +19,7 @@ if ($s) { $sourceText = "($s)" }
 if ($a) { $author = "[$a]" }
 
 # Create log file if it doesn't exist
-$logFile = "uvid_$(Get-Date -Format 'yyyy').log"
+$logFile = "$(Get-Date -Format 'yyyy')_uvid.log"
 if (-not (Test-Path $logFile)) { New-Item $logFile -ItemType File | Out-Null }
 
 # Get current timestamp

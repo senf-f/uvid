@@ -47,7 +47,7 @@ if [ -z "$text_entry" ]; then
 fi
 
 # Create log file if it doesn't exist
-log_file="uvid_$(date +'%Y').log"
+log_file="$(date +'%Y')_uvid.log"
 touch "$log_file"
 
 # Get current timestamp
