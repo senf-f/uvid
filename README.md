@@ -1,37 +1,60 @@
 # uvid
-uvid is a simple Bash script that provides a way to log entries with some metadata (text, source, and author) along with a timestamp. The log entries are saved in a year-specific log file.
+uvid is a simple script that logs timestamped entries with optional source and author metadata to a yearly log file. Available as a Bash script (`uvid.sh`) and a PowerShell script (`uvid.ps1`).
 
-## Usage
-Save the `uvid` script in your preferred location and make sure it has executable permissions:
+## Setup
+
+**Bash:**
 ```bash
 chmod +x uvid.sh
 ```
 
-To use this script, execute it with the following command:
+**PowerShell:** no setup required.
+
+## Usage
+
+### Inline
 ```bash
-./uvid.sh -s "some source" -a "some author" "some text entry"
+./uvid.sh "text entry" [-s "source"] [-a "author"]
+```
+```powershell
+.\uvid.ps1 "text entry" [-s "source"] [-a "author"]
+```
+
+### Interactive
+Run without arguments to be prompted for each field:
+```
+$ ./uvid.sh
+Text: some insight
+Source: book title
+Author: John Doe
+
+Logged: [28.02.2026 14:30] some insight [John Doe] (book title)
+File:   2026_uvid.log
+```
+Source and author are optional — press Enter to leave them blank.
+
+### Help
+```bash
+./uvid.sh --help
+```
+```powershell
+.\uvid.ps1 -Help
 ```
 
 ## Options
-- -s, --source: Specifies the source of the log entry.
-- -a, --author: Specifies the author of the log entry.
-- uvid: Indicates the command name, which should always be included as an argument.
-- Any remaining arguments after parsing will be considered as the text entry.
+| Flag | Description |
+|------|-------------|
+| `-s` | Source of the entry (optional) |
+| `-a` | Author of the entry (optional) |
 
 ## Log file
-The script creates a new log file named `uvid_<year>.log` in the current directory if it doesn't exist. The entries are stored in this log file, and a new log file is created each year to separate the entries.
+Entries are saved to `YEAR_uvid.log` in the current directory. A new file is created each year.
 
 ## Example
 ```bash
-./uvid.sh -s "My Blog" -a "John Doe" "This is an example entry."
+./uvid.sh "This is an example entry." -s "My Blog" -a "John Doe"
 ```
-
-The above command will create a log entry like this in `uvid_<year>.log`:
-
-> [timestamp] This is an example entry. [John Doe] (My Blog)
-
-## Tips
-If your source or author contains spaces, make sure to enclose them in quotes when providing the arguments:
-```bash
-./uvid.sh -s "My Blog with spaces" -a "John O'Reilly" "This is an example entry."
+Produces the following entry in `2026_uvid.log`:
+```
+[28.02.2026 14:30] This is an example entry. [John Doe] (My Blog)
 ```
