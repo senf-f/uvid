@@ -1,0 +1,9 @@
+https://wwwlearnlinux.tv/getting-started-with-tmux
+https://tmucheatsheet.com/x
+https://tryhackme.com/room/tmuxremux
+
+CHANGE CURRENT SESSION NAME:		ctrl b shift $
+DETACH FROM SESSION:			ctrl b d
+LIST SESSIONS:				tmux ls
+SPLIT VERTICALLY:			ctrl b shift %
+SPLIT HORIZONTALY:			ctrl b shift "
