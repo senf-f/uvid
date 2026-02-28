@@ -39,10 +39,10 @@ if ($Help) {
 
 if ($Install) {
     $profileDir = Split-Path $PROFILE
-    if (-not (Test-Path $profileDir)) { New-Item $profileDir -ItemType Directory | Out-Null }
-    if (-not (Test-Path $PROFILE)) { New-Item $PROFILE -ItemType File | Out-Null }
+    if (-not (Test-Path $profileDir)) { New-Item $profileDir -ItemType Directory -Force | Out-Null }
+    if (-not (Test-Path $PROFILE)) { New-Item $PROFILE -ItemType File -Force | Out-Null }
     $line = "function uvid { & `"$ScriptPath`" @args }"
-    if (Select-String -Path $PROFILE -Pattern "function uvid" -Quiet) {
+    if ((Test-Path $PROFILE) -and (Select-String -Path $PROFILE -Pattern "function uvid" -Quiet)) {
         Write-Host "uvid is already in your PowerShell profile."
     } else {
         Add-Content -Path $PROFILE -Value "`n$line"
