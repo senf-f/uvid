@@ -38,15 +38,14 @@ if ($Help) {
 }
 
 if ($Install) {
-    $profileDir = Split-Path $PROFILE
-    if (-not (Test-Path $profileDir)) { New-Item $profileDir -ItemType Directory -Force | Out-Null }
-    if (-not (Test-Path $PROFILE)) { New-Item $PROFILE -ItemType File -Force | Out-Null }
-    $line = "function uvid { & `"$ScriptPath`" @args }"
-    if ((Test-Path $PROFILE) -and (Select-String -Path $PROFILE -Pattern "function uvid" -Quiet)) {
-        Write-Host "uvid is already in your PowerShell profile."
+    $scriptDir = Split-Path $ScriptPath
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if (($userPath -split ";") -contains $scriptDir) {
+        Write-Host "uvid is already in PATH."
     } else {
-        Add-Content -Path $PROFILE -Value "`n$line"
-        Write-Host "Installed. Restart PowerShell or run: . `$PROFILE"
+        [Environment]::SetEnvironmentVariable("PATH", "$userPath;$scriptDir", "User")
+        $env:PATH += ";$scriptDir"
+        Write-Host "Installed. Open a new terminal and run 'uvid' from anywhere."
     }
     exit 0
 }
