@@ -4,9 +4,13 @@ param(
 
     [string]$s,
     [string]$a,
-
+    [string]$Search,
+    [int]$List = 0,
+    [switch]$Install,
     [switch]$Help
 )
+
+$ScriptPath = $MyInvocation.MyCommand.Path
 
 if ($Help) {
     Write-Host "uvid - log timestamped entries to a yearly log file"
@@ -16,15 +20,61 @@ if ($Help) {
     Write-Host "  uvid              (interactive mode)"
     Write-Host ""
     Write-Host "Arguments:"
-    Write-Host "  `"text entry`"   The text to log (required)"
-    Write-Host "  -s `"source`"    Source of the entry (optional)"
-    Write-Host "  -a `"author`"    Author of the entry (optional)"
-    Write-Host "  -Help          Show this help message"
+    Write-Host "  `"text entry`"      The text to log (required)"
+    Write-Host "  -s `"source`"       Source of the entry (optional)"
+    Write-Host "  -a `"author`"       Author of the entry (optional)"
+    Write-Host ""
+    Write-Host "Flags:"
+    Write-Host "  -List n           Show last n entries from this year's log"
+    Write-Host "  -Search `"term`"    Search all log files for a term"
+    Write-Host "  -Install          Add uvid function to PowerShell profile"
+    Write-Host "  -Help             Show this help message"
     Write-Host ""
     Write-Host "Log file: YEAR_uvid.log (created in the current directory)"
     Write-Host ""
     Write-Host "Example:"
     Write-Host "  uvid `"some insight`" -s `"book title`" -a `"John Doe`""
+    exit 0
+}
+
+if ($Install) {
+    $profileDir = Split-Path $PROFILE
+    if (-not (Test-Path $profileDir)) { New-Item $profileDir -ItemType Directory | Out-Null }
+    if (-not (Test-Path $PROFILE)) { New-Item $PROFILE -ItemType File | Out-Null }
+    $line = "function uvid { & `"$ScriptPath`" @args }"
+    if (Select-String -Path $PROFILE -Pattern "function uvid" -Quiet) {
+        Write-Host "uvid is already in your PowerShell profile."
+    } else {
+        Add-Content -Path $PROFILE -Value "`n$line"
+        Write-Host "Installed. Restart PowerShell or run: . `$PROFILE"
+    }
+    exit 0
+}
+
+if ($PSBoundParameters.ContainsKey('List')) {
+    $n = if ($List -gt 0) { $List } else { 10 }
+    $logFile = "$(Get-Date -Format 'yyyy')_uvid.log"
+    if (-not (Test-Path $logFile)) {
+        Write-Host "No log file found for this year."
+        exit 0
+    }
+    Write-Host "Last $n entries from $logFile`:"
+    Write-Host ""
+    Get-Content $logFile -Tail $n
+    exit 0
+}
+
+if ($PSBoundParameters.ContainsKey('Search')) {
+    if (-not $Search) {
+        Write-Host "Usage: uvid -Search `"term`""
+        exit 1
+    }
+    $logFiles = Get-Item *_uvid.log -ErrorAction SilentlyContinue
+    if (-not $logFiles) {
+        Write-Host "No log files found."
+        exit 0
+    }
+    Select-String -Path *_uvid.log -Pattern $Search -CaseSensitive:$false
     exit 0
 }
 
@@ -57,17 +107,15 @@ if ($PSBoundParameters.Count -eq 0) {
 
     Write-Entry $entry
 } else {
-    # Non-interactive mode
-    $sourceText = "( - )"
-    $author = "[ - ]"
-
-    if ($s) { $sourceText = "($s)" }
-    if ($a) { $author = "[$a]" }
-
+    # Inline mode
     if (-not $TextEntry) {
         Write-Host "Usage: uvid `"some text entry`" -s `"source`" -a `"author`""
         exit 1
     }
 
-    Write-Entry "[$timestamp] $TextEntry $author $sourceText"
+    $entry = "[$timestamp] $TextEntry"
+    if ($a) { $entry += " [$a]" }
+    if ($s) { $entry += " ($s)" }
+
+    Write-Entry $entry
 }

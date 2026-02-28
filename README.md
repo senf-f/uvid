@@ -1,29 +1,32 @@
 # uvid
-uvid is a simple script that logs timestamped entries with optional source and author metadata to a yearly log file. Available as a Bash script (`uvid.sh`) and a PowerShell script (`uvid.ps1`).
+uvid is a simple script for capturing timestamped ideas with optional source and author metadata, saved to a yearly log file. Available as a Bash script (`uvid.sh`) and a PowerShell script (`uvid.ps1`).
 
-## Setup
+## Install
 
 **Bash:**
 ```bash
 chmod +x uvid.sh
+./uvid.sh --install
 ```
 
-**PowerShell:** no setup required.
+**PowerShell:**
+```powershell
+.\uvid.ps1 -Install
+```
+
+This adds `uvid` as a command available anywhere in your shell.
 
 ## Usage
 
 ### Inline
 ```bash
-./uvid.sh "text entry" [-s "source"] [-a "author"]
-```
-```powershell
-.\uvid.ps1 "text entry" [-s "source"] [-a "author"]
+uvid "text entry" [-s "source"] [-a "author"]
 ```
 
 ### Interactive
-Run without arguments to be prompted for each field:
+Run `uvid` with no arguments to be prompted for each field:
 ```
-$ ./uvid.sh
+$ uvid
 Text: some insight
 Source: book title
 Author: John Doe
@@ -33,12 +36,30 @@ File:   2026_uvid.log
 ```
 Source and author are optional — press Enter to leave them blank.
 
-### Help
+### List recent entries
 ```bash
-./uvid.sh --help
+uvid --list        # last 10 entries
+uvid --list 5      # last 5 entries
 ```
 ```powershell
-.\uvid.ps1 -Help
+uvid -List 10
+```
+
+### Search
+```bash
+uvid --search "keyword"
+```
+```powershell
+uvid -Search "keyword"
+```
+Searches across all log files.
+
+### Help
+```bash
+uvid --help
+```
+```powershell
+uvid -Help
 ```
 
 ## Options
@@ -46,13 +67,17 @@ Source and author are optional — press Enter to leave them blank.
 |------|-------------|
 | `-s` | Source of the entry (optional) |
 | `-a` | Author of the entry (optional) |
+| `--list [n]` / `-List n` | Show last n entries from this year's log |
+| `--search` / `-Search` | Search all log files for a term |
+| `--install` / `-Install` | Install uvid to your shell |
+| `--help` / `-Help` | Show help |
 
 ## Log file
 Entries are saved to `YEAR_uvid.log` in the current directory. A new file is created each year.
 
 ## Example
 ```bash
-./uvid.sh "This is an example entry." -s "My Blog" -a "John Doe"
+uvid "This is an example entry." -s "My Blog" -a "John Doe"
 ```
 Produces the following entry in `2026_uvid.log`:
 ```
