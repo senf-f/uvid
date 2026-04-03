@@ -225,7 +225,7 @@ if ($Edit) {
             $newContent += $line
         }
     }
-    Set-Content -Path $picked.File -Value $newContent
+    Set-Content -Path $picked.File -Value $newContent -Encoding UTF8
 
     Write-Host ""
     Write-Host "Updated: $newEntry"
@@ -255,7 +255,7 @@ if ($Delete) {
             $newContent += $line
         }
     }
-    Set-Content -Path $picked.File -Value $newContent
+    Set-Content -Path $picked.File -Value $newContent -Encoding UTF8
 
     Write-Host "Deleted."
     exit 0
