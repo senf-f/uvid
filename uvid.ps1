@@ -119,7 +119,8 @@ function Parse-Entry {
 }
 
 function Pick-Entry {
-    $choice = Read-Host "Browse recent or search? (b/s)"
+    $choice = Read-Host "Browse recent or search? (B/s)"
+    if (-not $choice) { $choice = "b" }
 
     $entries = @()
     $files = @()
@@ -238,9 +239,9 @@ if ($Delete) {
     Write-Host ""
     Write-Host "  $($picked.Line)"
     Write-Host ""
-    $confirm = Read-Host "Delete this entry? (y/n)"
+    $confirm = Read-Host "Delete this entry? (Y/n)"
 
-    if ($confirm -ne "y") {
+    if ($confirm -and $confirm -ne "y") {
         Write-Host "Cancelled."
         exit 0
     }

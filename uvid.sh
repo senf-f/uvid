@@ -106,8 +106,9 @@ parse_entry() {
 }
 
 pick_entry() {
-    echo "Browse recent or search? (b/s)"
+    echo "Browse recent or search? (B/s)"
     read -p "> " mode
+    [ -z "$mode" ] && mode="b"
 
     local entries=()
     local files=()
@@ -220,9 +221,9 @@ do_delete() {
     echo ""
     echo "  $picked_line"
     echo ""
-    read -p "Delete this entry? (y/n) " confirm
+    read -p "Delete this entry? (Y/n) " confirm
 
-    if [[ "$confirm" != "y" ]]; then
+    if [[ -n "$confirm" && "$confirm" != "y" ]]; then
         echo "Cancelled."
         exit 0
     fi
