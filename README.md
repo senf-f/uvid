@@ -54,6 +54,24 @@ uvid -Search "keyword"
 ```
 Searches across all log files.
 
+### Edit an entry
+```bash
+uvid --edit
+```
+```powershell
+uvid -Edit
+```
+Browse recent entries or search, then edit the selected entry field by field.
+
+### Delete an entry
+```bash
+uvid --delete
+```
+```powershell
+uvid -Delete
+```
+Browse recent entries or search, then confirm deletion.
+
 ### Help
 ```bash
 uvid --help
@@ -69,6 +87,8 @@ uvid -Help
 | `-a` | Author of the entry (optional) |
 | `--list [n]` / `-List n` | Show last n entries from this year's log |
 | `--search` / `-Search` | Search all log files for a term |
+| `--edit` / `-Edit` | Edit an existing entry interactively |
+| `--delete` / `-Delete` | Delete an existing entry with confirmation |
 | `--install` / `-Install` | Install uvid to your shell |
 | `--help` / `-Help` | Show help |
 
