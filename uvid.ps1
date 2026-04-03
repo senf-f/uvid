@@ -7,7 +7,9 @@ param(
     [string]$Search,
     [int]$List = 0,
     [switch]$Install,
-    [switch]$Help
+    [switch]$Help,
+    [switch]$Edit,
+    [switch]$Delete
 )
 
 $ScriptPath = $MyInvocation.MyCommand.Path
@@ -27,6 +29,8 @@ if ($Help) {
     Write-Host "Flags:"
     Write-Host "  -List n           Show last n entries from this year's log"
     Write-Host "  -Search `"term`"    Search all log files for a term"
+    Write-Host "  -Edit             Edit an existing entry"
+    Write-Host "  -Delete           Delete an existing entry"
     Write-Host "  -Install          Add uvid function to PowerShell profile"
     Write-Host "  -Help             Show this help message"
     Write-Host ""
@@ -85,6 +89,176 @@ function Write-Entry {
     Write-Host ""
     Write-Host "Logged: $Entry"
     Write-Host "File:   $logFile"
+}
+
+function Parse-Entry {
+    param([string]$Line)
+    $result = @{ Timestamp = ""; Text = ""; Author = ""; Source = "" }
+
+    # Extract timestamp
+    if ($Line -match '^\[[\d.]+\s[\d:]+\]') {
+        $result.Timestamp = $Matches[0]
+    }
+
+    $rest = ($Line -replace '^\[[\d.]+\s[\d:]+\]\s*', '')
+
+    # Extract source (trailing parenthesized text)
+    if ($rest -match '\(([^)]+)\)$') {
+        $result.Source = $Matches[1]
+        $rest = ($rest -replace '\s*\([^)]+\)$', '')
+    }
+
+    # Extract author (trailing bracketed text)
+    if ($rest -match '\[([^\]]+)\]$') {
+        $result.Author = $Matches[1]
+        $rest = ($rest -replace '\s*\[[^\]]+\]$', '')
+    }
+
+    $result.Text = $rest.TrimEnd()
+    return $result
+}
+
+function Pick-Entry {
+    $choice = Read-Host "Browse recent or search? (b/s)"
+
+    $entries = @()
+    $files = @()
+
+    if ($choice -eq "s") {
+        $term = Read-Host "Search term"
+        $logFiles = Get-Item *_uvid.log -ErrorAction SilentlyContinue
+        if (-not $logFiles) {
+            Write-Host "No log files found."
+            exit 0
+        }
+        $matches = Select-String -Path *_uvid.log -Pattern $term -CaseSensitive:$false
+        if (-not $matches) {
+            Write-Host "No matches found."
+            exit 0
+        }
+        foreach ($m in $matches) {
+            $entries += $m.Line
+            $files += $m.Path
+        }
+    } else {
+        $logFile = "$(Get-Date -Format 'yyyy')_uvid.log"
+        if (-not (Test-Path $logFile)) {
+            Write-Host "No log file found for this year."
+            exit 0
+        }
+        $content = Get-Content $logFile
+        if (-not $content) {
+            Write-Host "No entries found."
+            exit 0
+        }
+        $tail = $content | Select-Object -Last 10
+        foreach ($line in $tail) {
+            $entries += $line
+            $files += (Resolve-Path $logFile).Path
+        }
+    }
+
+    Write-Host ""
+    for ($i = 0; $i -lt $entries.Count; $i++) {
+        Write-Host "  $($i + 1). $($entries[$i])"
+    }
+    Write-Host ""
+    $selection = Read-Host "Select entry number"
+
+    $num = 0
+    if (-not [int]::TryParse($selection, [ref]$num) -or $num -lt 1 -or $num -gt $entries.Count) {
+        Write-Host "Invalid selection."
+        exit 1
+    }
+
+    return @{
+        Line = $entries[$num - 1]
+        File = $files[$num - 1]
+    }
+}
+
+if ($Edit) {
+    $picked = Pick-Entry
+    $parsed = Parse-Entry $picked.Line
+
+    Write-Host ""
+    Write-Host "Editing entry. Press Enter to keep current value."
+    Write-Host ""
+
+    $displayAuthor = if ($parsed.Author) { $parsed.Author } else { "(none)" }
+    $displaySource = if ($parsed.Source) { $parsed.Source } else { "(none)" }
+
+    $newText = Read-Host "Text [$($parsed.Text)]"
+    $newAuthor = Read-Host "Author [$displayAuthor]"
+    $newSource = Read-Host "Source [$displaySource]"
+
+    # Keep current values if Enter pressed
+    if (-not $newText) { $newText = $parsed.Text }
+
+    # For author/source: Enter=keep, whitespace-only=clear
+    if ($newAuthor -eq "") {
+        $newAuthor = $parsed.Author
+    } elseif ($newAuthor.Trim() -eq "") {
+        $newAuthor = ""
+    }
+
+    if ($newSource -eq "") {
+        $newSource = $parsed.Source
+    } elseif ($newSource.Trim() -eq "") {
+        $newSource = ""
+    }
+
+    # Reconstruct entry
+    $newEntry = "$($parsed.Timestamp) $newText"
+    if ($newAuthor) { $newEntry += " [$newAuthor]" }
+    if ($newSource) { $newEntry += " ($newSource)" }
+
+    # Replace in file (only first match)
+    $content = Get-Content $picked.File
+    $replaced = $false
+    $newContent = @()
+    foreach ($line in $content) {
+        if ($line -eq $picked.Line -and -not $replaced) {
+            $newContent += $newEntry
+            $replaced = $true
+        } else {
+            $newContent += $line
+        }
+    }
+    Set-Content -Path $picked.File -Value $newContent
+
+    Write-Host ""
+    Write-Host "Updated: $newEntry"
+    exit 0
+}
+
+if ($Delete) {
+    $picked = Pick-Entry
+
+    Write-Host ""
+    Write-Host "  $($picked.Line)"
+    Write-Host ""
+    $confirm = Read-Host "Delete this entry? (y/n)"
+
+    if ($confirm -ne "y") {
+        Write-Host "Cancelled."
+        exit 0
+    }
+
+    $content = Get-Content $picked.File
+    $deleted = $false
+    $newContent = @()
+    foreach ($line in $content) {
+        if ($line -eq $picked.Line -and -not $deleted) {
+            $deleted = $true
+        } else {
+            $newContent += $line
+        }
+    }
+    Set-Content -Path $picked.File -Value $newContent
+
+    Write-Host "Deleted."
+    exit 0
 }
 
 $timestamp = Get-Date -Format "dd.MM.yyyy HH:mm"
