@@ -272,8 +272,10 @@ if ($PSBoundParameters.Count -eq 0) {
         exit 1
     }
 
-    $sourceInput = Read-Host "Source"
-    $authorInput = Read-Host "Author"
+    $sourceInput = Read-Host "Source [-]"
+    if (-not $sourceInput) { $sourceInput = "-" }
+    $authorInput = Read-Host "Author [.]"
+    if (-not $authorInput) { $authorInput = "." }
 
     $entry = "[$timestamp] $TextEntry"
     if ($authorInput) { $entry += " [$authorInput]" }

@@ -270,8 +270,10 @@ if [[ "$#" -eq 0 ]]; then
         exit 1
     fi
 
-    read -p "Source: " source_input
-    read -p "Author: " author_input
+    read -p "Source [-]: " source_input
+    [ -z "$source_input" ] && source_input="-"
+    read -p "Author [.]: " author_input
+    [ -z "$author_input" ] && author_input="."
 
     entry="[$timestamp] $text_entry"
     [ -n "$author_input" ] && entry="$entry [$author_input]"
