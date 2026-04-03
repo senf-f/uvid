@@ -77,7 +77,10 @@ log_entry() {
 parse_entry() {
     local line="$1"
     # Extract timestamp: [DD.MM.YYYY HH:MM]
-    p_timestamp=$(echo "$line" | grep -oP '^\[[\d.]+\s[\d:]+\]')
+    local ts_re='^\[([0-9.]+[[:space:]][0-9:]+)\]'
+    if [[ "$line" =~ $ts_re ]]; then
+        p_timestamp="[${BASH_REMATCH[1]}]"
+    fi
 
     # Remove timestamp from line
     local rest="${line#$p_timestamp }"
@@ -196,9 +199,11 @@ do_edit() {
 
     # Replace in file using temp file
     local tmpfile=$(mktemp)
+    local replaced=false
     while IFS= read -r line; do
-        if [ "$line" = "$picked_line" ]; then
+        if [ "$line" = "$picked_line" ] && [ "$replaced" = false ]; then
             echo "$new_entry"
+            replaced=true
         else
             echo "$line"
         fi
