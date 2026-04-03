@@ -131,12 +131,12 @@ function Pick-Entry {
             Write-Host "No log files found."
             exit 0
         }
-        $matches = Select-String -Path *_uvid.log -Pattern $term -CaseSensitive:$false
-        if (-not $matches) {
+        $searchResults = Select-String -Path *_uvid.log -Pattern $term -CaseSensitive:$false
+        if (-not $searchResults) {
             Write-Host "No matches found."
             exit 0
         }
-        foreach ($m in $matches) {
+        foreach ($m in $searchResults) {
             $entries += $m.Line
             $files += $m.Path
         }
