@@ -72,6 +72,18 @@ uvid -Delete
 ```
 Browse recent entries or search, then confirm deletion.
 
+### Sync logs with VPS
+```bash
+uvid --sync
+```
+Manually trigger a sync with the VPS. Pushes local logs, merges with remote, pulls merged result. Also runs automatically every 15 minutes via cron.
+
+**Setup:**
+1. Set `VPS_HOST` in `uvid-sync.sh`
+2. Deploy merge script: `scp uvid-merge.sh root@VPS_HOST:~/uvid-logs/`
+3. Run first sync: `uvid --sync`
+4. Add cron: `*/15 * * * * /path/to/uvid/uvid-sync.sh >> /tmp/uvid-sync.log 2>&1`
+
 ### Help
 ```bash
 uvid --help
@@ -89,6 +101,7 @@ uvid -Help
 | `--search` / `-Search` | Search all log files for a term |
 | `--edit` / `-Edit` | Edit an existing entry interactively |
 | `--delete` / `-Delete` | Delete an existing entry with confirmation |
+| `--sync` | Sync logs with VPS |
 | `--install` / `-Install` | Install uvid to your shell |
 | `--help` / `-Help` | Show help |
 
