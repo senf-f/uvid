@@ -19,6 +19,7 @@ show_help() {
     echo "  --search \"term\"   Search all log files for a term"
     echo "  --edit            Edit an existing entry"
     echo "  --delete          Delete an existing entry"
+    echo "  --sync            Sync logs with VPS"
     echo "  --install         Install uvid to /usr/local/bin"
     echo "  --help, -h        Show this help message"
     echo ""
@@ -260,6 +261,15 @@ case $1 in
         do_edit; exit 0 ;;
     --delete)
         do_delete; exit 0 ;;
+    --sync)
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [ -x "$SCRIPT_DIR/uvid-sync.sh" ]; then
+            "$SCRIPT_DIR/uvid-sync.sh"
+        else
+            echo "uvid-sync.sh not found or not executable."
+            exit 1
+        fi
+        exit 0 ;;
 esac
 
 if [[ "$#" -eq 0 ]]; then
