@@ -77,32 +77,34 @@ log_entry() {
 
 parse_entry() {
     local line="$1"
-    # Extract timestamp: [DD.MM.YYYY HH:MM]
+    p_timestamp=""
+    p_source=""
+    p_author=""
     local ts_re='^\[([0-9.]+[[:space:]][0-9:]+)\]'
     if [[ "$line" =~ $ts_re ]]; then
         p_timestamp="[${BASH_REMATCH[1]}]"
     fi
 
-    # Remove timestamp from line
-    local rest="${line#$p_timestamp }"
+    # Strip timestamp using substring arithmetic (avoids glob [...] interpretation)
+    local rest="$line"
+    if [ -n "$p_timestamp" ]; then
+        rest="${rest:${#p_timestamp}+1}"
+    fi
 
-    # Extract source (trailing parenthesized text)
-    p_source=""
     local src_re='[(]([^)]+)[)]$'
     if [[ "$rest" =~ $src_re ]]; then
         p_source="${BASH_REMATCH[1]}"
-        rest="${rest% ($p_source)}"
+        local src_suffix=" ($p_source)"
+        rest="${rest:0:${#rest}-${#src_suffix}}"
     fi
 
-    # Extract author (trailing bracketed text)
-    p_author=""
     local auth_re='[[]([^]]+)[]]$'
     if [[ "$rest" =~ $auth_re ]]; then
         p_author="${BASH_REMATCH[1]}"
-        rest="${rest% [$p_author]}"
+        local auth_suffix=" [$p_author]"
+        rest="${rest:0:${#rest}-${#auth_suffix}}"
     fi
 
-    # Remaining text is the entry text (trim trailing whitespace)
     p_text=$(echo "$rest" | sed 's/[[:space:]]*$//')
 }
 
@@ -174,9 +176,9 @@ do_edit() {
     local display_author="${p_author:-(none)}"
     local display_source="${p_source:-(none)}"
 
-    read -p "Text [$p_text]: " new_text
-    read -p "Author [$display_author]: " new_author
-    read -p "Source [$display_source]: " new_source
+    IFS= read -rp "Text [$p_text]: " new_text
+    IFS= read -rp "Author [$display_author]: " new_author
+    IFS= read -rp "Source [$display_source]: " new_source
 
     # Keep current values if Enter pressed
     [ -z "$new_text" ] && new_text="$p_text"

@@ -1,0 +1,272 @@
+#!/bin/bash
+# Tests for uvid.sh
+# Usage: ./tests/test_uvid.sh
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UVID="$SCRIPT_DIR/../uvid.sh"
+YEAR=$(date +'%Y')
+LOG_FILE="${YEAR}_uvid.log"
+
+TESTS_PASSED=0
+TESTS_FAILED=0
+ORIG_DIR="$(pwd)"
+
+setup() {
+    TEST_DIR=$(mktemp -d)
+    cd "$TEST_DIR"
+}
+
+teardown() {
+    cd "$ORIG_DIR"
+    rm -rf "$TEST_DIR"
+}
+
+strip_ansi() {
+    echo "$1" | sed 's/\x1b\[[0-9;]*[mK]//g'
+}
+
+assert_contains() {
+    local haystack=$(strip_ansi "$1")
+    local needle="$2"
+    local msg="$3"
+    if [[ "$haystack" == *"$needle"* ]]; then
+        echo "  PASS: $msg"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    else
+        echo "  FAIL: $msg"
+        echo "    expected to contain: $needle"
+        echo "    got: $haystack"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+    fi
+}
+
+assert_not_contains() {
+    local haystack=$(strip_ansi "$1")
+    local needle="$2"
+    local msg="$3"
+    if [[ "$haystack" != *"$needle"* ]]; then
+        echo "  PASS: $msg"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    else
+        echo "  FAIL: $msg"
+        echo "    expected NOT to contain: $needle"
+        echo "    got: $haystack"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+    fi
+}
+
+assert_equals() {
+    local expected="$1"
+    local actual="$2"
+    local msg="$3"
+    if [ "$expected" = "$actual" ]; then
+        echo "  PASS: $msg"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+    else
+        echo "  FAIL: $msg"
+        echo "    expected: $expected"
+        echo "    got:      $actual"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+    fi
+}
+
+run_test() {
+    local name="$1"
+    echo ""
+    echo "TEST: $name"
+    setup
+    "$name"
+    teardown
+}
+
+# ---- Log writing (inline) ----
+
+test_inline_text_only() {
+    bash "$UVID" "some insight" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "some insight" "text is written to log"
+    assert_contains "$content" "[$(date +'%d.%m.%Y')" "timestamp present"
+}
+
+test_inline_with_author_and_source() {
+    bash "$UVID" "quoted text" -a "John Doe" -s "Book Title" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "quoted text" "text present"
+    assert_contains "$content" "[John Doe]" "author bracket present"
+    assert_contains "$content" "(Book Title)" "source paren present"
+}
+
+# ---- Log writing (interactive) ----
+
+test_interactive_full() {
+    printf "my thought\nBlog\nJane\n" | bash "$UVID" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "my thought" "text from interactive"
+    assert_contains "$content" "[Jane]" "author from interactive"
+    assert_contains "$content" "(Blog)" "source from interactive"
+}
+
+test_interactive_defaults() {
+    printf "just text\n\n\n" | bash "$UVID" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "just text" "text present"
+    assert_contains "$content" "[.]" "author defaults to ."
+    assert_contains "$content" "(-)" "source defaults to -"
+}
+
+# ---- List ----
+
+test_list_default_shows_all_when_under_ten() {
+    bash "$UVID" "entry one" > /dev/null
+    bash "$UVID" "entry two" > /dev/null
+    local output=$(bash "$UVID" --list)
+    assert_contains "$output" "entry one" "list contains first entry"
+    assert_contains "$output" "entry two" "list contains second entry"
+}
+
+test_list_with_count() {
+    bash "$UVID" "a1" > /dev/null
+    bash "$UVID" "a2" > /dev/null
+    bash "$UVID" "a3" > /dev/null
+    local output=$(bash "$UVID" --list 1)
+    assert_contains "$output" "a3" "list 1 shows last entry"
+    assert_not_contains "$output" "a1" "list 1 does not show first entry"
+}
+
+test_list_no_log_file() {
+    local output=$(bash "$UVID" --list)
+    assert_contains "$output" "No log file found" "message when no log exists"
+}
+
+# ---- Search ----
+
+test_search_finds_match() {
+    bash "$UVID" "apple pie recipe" > /dev/null
+    bash "$UVID" "banana bread" > /dev/null
+    local output=$(bash "$UVID" --search "apple")
+    assert_contains "$output" "apple pie recipe" "search finds matching entry"
+    assert_not_contains "$output" "banana bread" "search excludes non-match"
+}
+
+test_search_case_insensitive() {
+    bash "$UVID" "Hello World" > /dev/null
+    local output=$(bash "$UVID" --search "hello")
+    assert_contains "$output" "Hello World" "search is case insensitive"
+}
+
+test_search_across_years() {
+    echo "[15.06.2025 10:00] old entry" > "2025_uvid.log"
+    bash "$UVID" "new entry about old things" > /dev/null
+    local output=$(bash "$UVID" --search "entry")
+    assert_contains "$output" "old entry" "search finds in previous year"
+    assert_contains "$output" "new entry about old things" "search finds in current year"
+}
+
+# ---- Edit ----
+
+test_edit_updates_text() {
+    bash "$UVID" "original text" -a "author" -s "source" > /dev/null
+    # Browse (Enter=b), select 1, new text, keep author, keep source
+    printf "\n1\nupdated text\n\n\n" | bash "$UVID" --edit > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "updated text" "text is updated"
+    assert_not_contains "$content" "original text" "original text removed"
+    assert_contains "$content" "[author]" "author preserved"
+    assert_contains "$content" "(source)" "source preserved"
+}
+
+test_edit_preserves_timestamp() {
+    # Create entry with a specific timestamp we can check for
+    echo "[15.03.2025 09:30] fixed entry [a] (s)" > "$LOG_FILE"
+    # Need browse to look at current year, so use search to find entry
+    printf "s\nfixed\n1\nchanged entry\n\n\n" | bash "$UVID" --edit > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "[15.03.2025 09:30]" "original timestamp kept"
+    assert_contains "$content" "changed entry" "text updated"
+}
+
+test_edit_clears_author_with_space() {
+    bash "$UVID" "text" -a "to remove" -s "keep me" > /dev/null
+    # Keep text (empty), clear author (space), keep source (empty)
+    printf "\n1\n\n \n\n" | bash "$UVID" --edit > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_not_contains "$content" "[to remove]" "author cleared"
+    assert_contains "$content" "(keep me)" "source preserved"
+}
+
+test_edit_keeps_all_on_empty_input() {
+    bash "$UVID" "untouched" -a "same author" -s "same source" > /dev/null
+    # Browse, select 1, all Enter
+    printf "\n1\n\n\n\n" | bash "$UVID" --edit > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "untouched" "text preserved"
+    assert_contains "$content" "[same author]" "author preserved"
+    assert_contains "$content" "(same source)" "source preserved"
+}
+
+# ---- Delete ----
+
+test_delete_removes_entry() {
+    bash "$UVID" "entry to remove" > /dev/null
+    bash "$UVID" "entry to keep" > /dev/null
+    # Browse, select 1 (oldest first in tail order), confirm with Enter (default y)
+    printf "\n1\n\n" | bash "$UVID" --delete > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_not_contains "$content" "entry to remove" "first entry removed"
+    assert_contains "$content" "entry to keep" "second entry remains"
+}
+
+test_delete_cancel_with_n() {
+    bash "$UVID" "should remain" > /dev/null
+    # Browse, select 1, type n to cancel
+    printf "\n1\nn\n" | bash "$UVID" --delete > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "should remain" "entry still present after cancel"
+}
+
+test_delete_default_confirm_is_yes() {
+    bash "$UVID" "goodbye" > /dev/null
+    # Browse, select 1, Enter = default yes
+    printf "\n1\n\n" | bash "$UVID" --delete > /dev/null
+    local line_count=$(wc -l < "$LOG_FILE" | tr -d ' ')
+    assert_equals "0" "$line_count" "log file is empty after delete"
+}
+
+test_delete_via_search() {
+    bash "$UVID" "alpha entry" > /dev/null
+    bash "$UVID" "beta entry" > /dev/null
+    # Search mode, search for "alpha", select 1, confirm
+    printf "s\nalpha\n1\n\n" | bash "$UVID" --delete > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_not_contains "$content" "alpha entry" "alpha entry deleted"
+    assert_contains "$content" "beta entry" "beta entry remains"
+}
+
+# ---- Run all ----
+
+run_test test_inline_text_only
+run_test test_inline_with_author_and_source
+run_test test_interactive_full
+run_test test_interactive_defaults
+run_test test_list_default_shows_all_when_under_ten
+run_test test_list_with_count
+run_test test_list_no_log_file
+run_test test_search_finds_match
+run_test test_search_case_insensitive
+run_test test_search_across_years
+run_test test_edit_updates_text
+run_test test_edit_preserves_timestamp
+run_test test_edit_clears_author_with_space
+run_test test_edit_keeps_all_on_empty_input
+run_test test_delete_removes_entry
+run_test test_delete_cancel_with_n
+run_test test_delete_default_confirm_is_yes
+run_test test_delete_via_search
+
+echo ""
+echo "======================================"
+echo "Passed: $TESTS_PASSED"
+echo "Failed: $TESTS_FAILED"
+echo "======================================"
+
+[ "$TESTS_FAILED" -eq 0 ]
