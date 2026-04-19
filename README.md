@@ -78,6 +78,11 @@ uvid --sync
 ```
 Manually trigger a sync with the VPS. Pushes local logs, merges with remote, pulls merged result. Also runs automatically every 15 minutes via cron.
 
+**Merge semantics:**
+- New entries from any machine are preserved.
+- Entries are keyed by timestamp; edits on one machine propagate on the next sync.
+- **Deletes do not propagate.** An entry deleted on one machine will reappear on the next sync because the other machine still has it. To truly remove an entry, delete it on every machine.
+
 **Setup:**
 1. Create `.uvid-sync.conf` (gitignored) with `VPS_HOST="your-host-or-alias"`
 2. Deploy merge script: `scp uvid-merge.sh root@VPS_HOST:~/uvid-logs/`

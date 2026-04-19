@@ -28,15 +28,17 @@ if [[ "$1" == "--dry-run" ]]; then
     echo "[dry-run] No files will be changed."
 fi
 
-# Step 1: Push local logs to a staging directory on VPS
-echo "Pushing local logs to VPS..."
-ssh "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/incoming"
-rsync $DRY_RUN -avz --include='*_uvid.log' --exclude='*' "$LOCAL_DIR/" "$VPS_USER@$VPS_HOST:$VPS_DIR/incoming/"
-
 if [ -n "$DRY_RUN" ]; then
+    echo "Pushing local logs to VPS (dry-run)..."
+    rsync $DRY_RUN -avz --include='*_uvid.log' --exclude='*' "$LOCAL_DIR/" "$VPS_USER@$VPS_HOST:$VPS_DIR/incoming/"
     echo "[dry-run] Would merge on VPS and pull back."
     exit 0
 fi
+
+# Step 1: Push local logs to a staging directory on VPS
+echo "Pushing local logs to VPS..."
+ssh "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/incoming"
+rsync -avz --include='*_uvid.log' --exclude='*' "$LOCAL_DIR/" "$VPS_USER@$VPS_HOST:$VPS_DIR/incoming/"
 
 # Step 2: Run merge on VPS
 echo "Merging on VPS..."
