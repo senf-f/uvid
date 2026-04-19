@@ -79,7 +79,7 @@ uvid --sync
 Manually trigger a sync with the VPS. Pushes local logs, merges with remote, pulls merged result. Also runs automatically every 15 minutes via cron.
 
 **Setup:**
-1. Set `VPS_HOST` in `uvid-sync.sh`
+1. Create `.uvid-sync.conf` (gitignored) with `VPS_HOST="your-host-or-alias"`
 2. Deploy merge script: `scp uvid-merge.sh root@VPS_HOST:~/uvid-logs/`
 3. Run first sync: `uvid --sync`
 4. Add cron: `*/15 * * * * /path/to/uvid/uvid-sync.sh >> /tmp/uvid-sync.log 2>&1`

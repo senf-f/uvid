@@ -1,3 +1,4 @@
 *.log
 docs/superpowers/
 .claude/
+.uvid-sync.conf

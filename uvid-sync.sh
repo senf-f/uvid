@@ -7,10 +7,20 @@
 
 set -e
 
-VPS_HOST="VPS_HOST"
+LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Defaults — override via .uvid-sync.conf (gitignored) or env vars
+VPS_HOST=""
 VPS_USER="root"
 VPS_DIR="~/uvid-logs"
-LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+[ -f "$LOCAL_DIR/.uvid-sync.conf" ] && source "$LOCAL_DIR/.uvid-sync.conf"
+
+if [ -z "$VPS_HOST" ]; then
+    echo "VPS_HOST is not set. Create $LOCAL_DIR/.uvid-sync.conf with:"
+    echo "  VPS_HOST=\"your-host-or-alias\""
+    exit 1
+fi
 
 DRY_RUN=""
 if [[ "$1" == "--dry-run" ]]; then
