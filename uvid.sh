@@ -2,6 +2,9 @@
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uvid.sh"
 
+UVID_DIR="${UVID_DIR:-$HOME/.uvid}"
+mkdir -p "$UVID_DIR"
+
 show_help() {
     echo "uvid - log timestamped entries to a yearly log file"
     echo ""
@@ -46,7 +49,7 @@ do_install() {
 
 show_list() {
     local n="${1:-10}"
-    local log_file="$(date +'%Y')_uvid.log"
+    local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
     if [ ! -f "$log_file" ]; then
         echo "No log file found for this year."
         exit 0
@@ -62,17 +65,17 @@ do_search() {
         echo "Usage: uvid --search \"term\""
         exit 1
     fi
-    local files=(*_uvid.log)
+    local files=("$UVID_DIR"/*_uvid.log)
     if [ ! -f "${files[0]}" ]; then
         echo "No log files found."
         exit 0
     fi
-    grep -Hi --color=always "$term" *_uvid.log
+    grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log
 }
 
 log_entry() {
     local entry="$1"
-    local log_file="$(date +'%Y')_uvid.log"
+    local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
     touch "$log_file"
     echo "$entry" >> "$log_file"
     echo ""
@@ -123,7 +126,7 @@ pick_entry() {
 
     if [[ "$mode" == "s" ]]; then
         read -p "Search term: " term
-        local log_files=(*_uvid.log)
+        local log_files=("$UVID_DIR"/*_uvid.log)
         if [ ! -f "${log_files[0]}" ]; then
             echo "No log files found."
             exit 0
@@ -133,13 +136,13 @@ pick_entry() {
             local line="${match#*:}"
             entries+=("$line")
             files+=("$file")
-        done < <(grep -iH "$term" *_uvid.log)
+        done < <(grep -iH "$term" "$UVID_DIR"/*_uvid.log)
         if [ ${#entries[@]} -eq 0 ]; then
             echo "No matches found."
             exit 0
         fi
     else
-        local log_file="$(date +'%Y')_uvid.log"
+        local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
         if [ ! -f "$log_file" ]; then
             echo "No log file found for this year."
             exit 0
@@ -281,12 +284,12 @@ do_export() {
     # Collect log files
     local log_files=()
     if [ -n "$filter_year" ]; then
-        local yf="${filter_year}_uvid.log"
+        local yf="$UVID_DIR/${filter_year}_uvid.log"
         if [ -f "$yf" ]; then
             log_files=("$yf")
         fi
     else
-        for f in $(ls *_uvid.log 2>/dev/null | sort); do
+        for f in $(ls "$UVID_DIR"/*_uvid.log 2>/dev/null | sort); do
             log_files+=("$f")
         done
     fi
