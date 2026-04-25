@@ -242,6 +242,63 @@ test_delete_via_search() {
     assert_contains "$content" "beta entry" "beta entry remains"
 }
 
+# ---- Export ----
+
+test_export_creates_file() {
+    bash "$UVID" "first entry" -a "Author" -s "Source" > /dev/null
+    bash "$UVID" "second entry" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    assert_equals "true" "$([ -f "$export_file" ] && echo true || echo false)" "export file created"
+}
+
+test_export_contains_entries() {
+    bash "$UVID" "first entry" -a "Author" -s "Source" > /dev/null
+    bash "$UVID" "second entry" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "# Uvid Export" "header present"
+    assert_contains "$content" "2 entries" "entry count in header"
+    assert_contains "$content" "**[" "entry formatted with bold timestamp"
+    assert_contains "$content" "first entry" "first entry present"
+    assert_contains "$content" "second entry" "second entry present"
+}
+
+test_export_metadata_formatting() {
+    bash "$UVID" "with both" -a "John" -s "Blog" > /dev/null
+    bash "$UVID" "with author only" -a "Jane" > /dev/null
+    bash "$UVID" "with source only" -s "Book" > /dev/null
+    bash "$UVID" "with defaults" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "Author: John | Source: Blog" "both author and source shown with pipe"
+    assert_contains "$content" "Author: Jane" "author-only line present"
+    assert_not_contains "$content" "Author: Jane |" "no pipe when only author"
+    assert_contains "$content" "Source: Book" "source-only line present"
+    assert_not_contains "$content" "Author: ." "default author excluded"
+    assert_not_contains "$content" "Source: -" "default source excluded"
+}
+
+test_export_no_entries() {
+    local output=$(bash "$UVID" --export)
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    assert_contains "$output" "No entries" "no-match message shown"
+    assert_equals "false" "$([ -f "$export_file" ] && echo true || echo false)" "no file created when no entries"
+}
+
+test_export_across_years() {
+    echo "[15.06.2025 10:00] old entry [OldAuth] (OldSrc)" > "2025_uvid.log"
+    bash "$UVID" "new entry" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "old entry" "entry from 2025 included"
+    assert_contains "$content" "new entry" "entry from current year included"
+    assert_contains "$content" "2 entries" "count includes both years"
+}
+
 # ---- Run all ----
 
 run_test test_inline_text_only
@@ -262,6 +319,11 @@ run_test test_delete_removes_entry
 run_test test_delete_cancel_with_n
 run_test test_delete_default_confirm_is_yes
 run_test test_delete_via_search
+run_test test_export_creates_file
+run_test test_export_contains_entries
+run_test test_export_metadata_formatting
+run_test test_export_no_entries
+run_test test_export_across_years
 
 echo ""
 echo "======================================"

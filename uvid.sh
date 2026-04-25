@@ -19,6 +19,7 @@ show_help() {
     echo "  --search \"term\"   Search all log files for a term"
     echo "  --edit            Edit an existing entry"
     echo "  --delete          Delete an existing entry"
+    echo "  --export          Export entries to Markdown"
     echo "  --sync            Sync logs with VPS"
     echo "  --install         Install uvid to /usr/local/bin"
     echo "  --help, -h        Show this help message"
@@ -245,6 +246,151 @@ do_delete() {
     echo "Deleted."
 }
 
+do_export() {
+    shift # consume --export
+    local filter_search="" filter_author="" filter_year="" filter_from="" filter_to=""
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --search) shift; filter_search="$1" ;;
+            --author) shift; filter_author="$1" ;;
+            --year)   shift; filter_year="$1" ;;
+            --from)   shift; filter_from="$1" ;;
+            --to)     shift; filter_to="$1" ;;
+            *) echo "Unknown export option: $1"; exit 1 ;;
+        esac
+        shift
+    done
+
+    # Validate: --year and --from/--to are mutually exclusive
+    if [ -n "$filter_year" ] && { [ -n "$filter_from" ] || [ -n "$filter_to" ]; }; then
+        echo "Error: --year and --from/--to cannot be combined."
+        exit 1
+    fi
+
+    # Validate: --from and --to must come together
+    if [ -n "$filter_from" ] && [ -z "$filter_to" ] || [ -z "$filter_from" ] && [ -n "$filter_to" ]; then
+        echo "Error: --from and --to must both be provided."
+        exit 1
+    fi
+
+    # Collect log files
+    local log_files=()
+    if [ -n "$filter_year" ]; then
+        local yf="${filter_year}_uvid.log"
+        if [ -f "$yf" ]; then
+            log_files=("$yf")
+        fi
+    else
+        for f in $(ls *_uvid.log 2>/dev/null | sort); do
+            log_files+=("$f")
+        done
+    fi
+
+    if [ ${#log_files[@]} -eq 0 ]; then
+        echo "No entries found matching the given filters."
+        return
+    fi
+
+    # Convert DD.MM.YYYY to YYYYMMDD integer
+    date_to_int() {
+        local d="$1"
+        echo "${d:6:4}${d:3:2}${d:0:2}"
+    }
+
+    local from_int="" to_int=""
+    if [ -n "$filter_from" ]; then
+        from_int=$(date_to_int "$filter_from")
+        to_int=$(date_to_int "$filter_to")
+    fi
+
+    # Collect matching entries
+    local matched=()
+    for file in "${log_files[@]}"; do
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+
+            # Search filter
+            if [ -n "$filter_search" ]; then
+                echo "$line" | grep -qi "$filter_search" || continue
+            fi
+
+            parse_entry "$line"
+
+            # Author filter
+            if [ -n "$filter_author" ]; then
+                local lower_author=$(echo "$p_author" | tr '[:upper:]' '[:lower:]')
+                local lower_filter=$(echo "$filter_author" | tr '[:upper:]' '[:lower:]')
+                [ "$lower_author" != "$lower_filter" ] && continue
+            fi
+
+            # Date range filter
+            if [ -n "$from_int" ]; then
+                local ts_date="${p_timestamp:1:10}"
+                local entry_int=$(date_to_int "$ts_date")
+                [ "$entry_int" -lt "$from_int" ] && continue
+                [ "$entry_int" -gt "$to_int" ] && continue
+            fi
+
+            matched+=("$line")
+        done < "$file"
+    done
+
+    if [ ${#matched[@]} -eq 0 ]; then
+        echo "No entries found matching the given filters."
+        return
+    fi
+
+    # Build header title
+    local title="# Uvid Export"
+    local parts=()
+    if [ -n "$filter_year" ]; then
+        parts+=("$filter_year")
+    elif [ -n "$filter_from" ]; then
+        parts+=("$filter_from – $filter_to")
+    fi
+    [ -n "$filter_author" ] && parts+=("$filter_author")
+    [ -n "$filter_search" ] && parts+=("\"$filter_search\"")
+    if [ ${#parts[@]} -gt 0 ]; then
+        local joined=$(IFS=', '; echo "${parts[*]}")
+        title="$title — $joined"
+    fi
+
+    local export_date=$(date +'%d.%m.%Y')
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+
+    {
+        echo "$title"
+        echo "> ${#matched[@]} entries | Exported $export_date"
+        echo ""
+        echo "---"
+
+        for line in "${matched[@]}"; do
+            parse_entry "$line"
+            echo ""
+            echo "**${p_timestamp}** $p_text"
+
+            local has_author=false has_source=false
+            if [ -n "$p_author" ] && [ "$p_author" != "." ]; then
+                has_author=true
+            fi
+            if [ -n "$p_source" ] && [ "$p_source" != "-" ]; then
+                has_source=true
+            fi
+
+            if $has_author && $has_source; then
+                echo "- Author: $p_author | Source: $p_source"
+            elif $has_author; then
+                echo "- Author: $p_author"
+            elif $has_source; then
+                echo "- Source: $p_source"
+            fi
+        done
+    } > "$export_file"
+
+    echo "Exported ${#matched[@]} entries to $export_file"
+}
+
 timestamp=$(date +'%d.%m.%Y %H:%M')
 
 # Handle special flags
@@ -263,6 +409,8 @@ case $1 in
         do_edit; exit 0 ;;
     --delete)
         do_delete; exit 0 ;;
+    --export)
+        do_export "$@"; exit 0 ;;
     --sync)
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         if [ -x "$SCRIPT_DIR/uvid-sync.sh" ]; then
