@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Position = 0)]
     [string]$TextEntry,
 
@@ -9,7 +9,12 @@ param(
     [switch]$Install,
     [switch]$Help,
     [switch]$Edit,
-    [switch]$Delete
+    [switch]$Delete,
+    [switch]$Export,
+    [string]$Author,
+    [int]$Year = 0,
+    [string]$From,
+    [string]$To
 )
 
 $ScriptPath = $MyInvocation.MyCommand.Path
@@ -31,6 +36,11 @@ if ($Help) {
     Write-Host "  -Search `"term`"    Search all log files for a term"
     Write-Host "  -Edit             Edit an existing entry"
     Write-Host "  -Delete           Delete an existing entry"
+    Write-Host "  -Export           Export entries to Markdown"
+    Write-Host "  -Author `"name`"    Filter by author (with -Export)"
+    Write-Host "  -Year n           Filter by year (with -Export)"
+    Write-Host "  -From `"date`"      Start of date range (with -Export)"
+    Write-Host "  -To `"date`"        End of date range (with -Export)"
     Write-Host "  -Install          Add uvid function to PowerShell profile"
     Write-Host "  -Help             Show this help message"
     Write-Host ""
@@ -259,6 +269,118 @@ if ($Delete) {
     Set-Content -Path $picked.File -Value $newContent -Encoding UTF8
 
     Write-Host "Deleted."
+    exit 0
+}
+
+if ($Export) {
+    # Validate: -Year and -From/-To are mutually exclusive
+    if ($Year -gt 0 -and ($From -or $To)) {
+        Write-Host "Error: -Year and -From/-To cannot be combined."
+        exit 1
+    }
+
+    # Validate: -From and -To must come together
+    if (($From -and -not $To) -or (-not $From -and $To)) {
+        Write-Host "Error: -From and -To must both be provided."
+        exit 1
+    }
+
+    # Collect log files
+    if ($Year -gt 0) {
+        $logFiles = Get-Item "${Year}_uvid.log" -ErrorAction SilentlyContinue
+    } else {
+        $logFiles = Get-Item *_uvid.log -ErrorAction SilentlyContinue | Sort-Object Name
+    }
+
+    if (-not $logFiles) {
+        Write-Host "No entries found matching the given filters."
+        exit 0
+    }
+
+    # Parse date range bounds
+    $fromDate = $null
+    $toDate = $null
+    if ($From) {
+        $fromDate = [datetime]::ParseExact($From, "dd.MM.yyyy", $null)
+        $toDate = [datetime]::ParseExact($To, "dd.MM.yyyy", $null)
+    }
+
+    # Collect matching entries
+    $matched = @()
+    foreach ($file in $logFiles) {
+        foreach ($line in (Get-Content $file.FullName)) {
+            if (-not $line) { continue }
+
+            # Search filter
+            if ($Search -and $line -notmatch [regex]::Escape($Search)) { continue }
+
+            $parsed = Parse-Entry $line
+
+            # Author filter
+            if ($Author -and $parsed.Author -ne $Author) {
+                if ($parsed.Author.ToLower() -ne $Author.ToLower()) { continue }
+            }
+
+            # Date range filter
+            if ($fromDate) {
+                $tsDate = $parsed.Timestamp -replace '[\[\]]', ''
+                $entryDateStr = ($tsDate -split ' ')[0]
+                $entryDate = [datetime]::ParseExact($entryDateStr, "dd.MM.yyyy", $null)
+                if ($entryDate -lt $fromDate -or $entryDate -gt $toDate) { continue }
+            }
+
+            $matched += $line
+        }
+    }
+
+    if ($matched.Count -eq 0) {
+        Write-Host "No entries found matching the given filters."
+        exit 0
+    }
+
+    # Build header title
+    $title = "# Uvid Export"
+    $parts = @()
+    if ($Year -gt 0) {
+        $parts += "$Year"
+    } elseif ($From) {
+        $parts += "$From – $To"
+    }
+    if ($Author) { $parts += $Author }
+    if ($Search) { $parts += "`"$Search`"" }
+    if ($parts.Count -gt 0) {
+        $title += " — $($parts -join ', ')"
+    }
+
+    $exportDate = Get-Date -Format "dd.MM.yyyy"
+    $exportFile = "uvid_export_$(Get-Date -Format 'yyyy-MM-dd').md"
+
+    $output = @()
+    $output += $title
+    $output += "> $($matched.Count) entries | Exported $exportDate"
+    $output += ""
+    $output += "---"
+
+    foreach ($line in $matched) {
+        $parsed = Parse-Entry $line
+
+        $output += ""
+        $output += "**$($parsed.Timestamp)** $($parsed.Text)"
+
+        $hasAuthor = $parsed.Author -and $parsed.Author -ne "."
+        $hasSource = $parsed.Source -and $parsed.Source -ne "-"
+
+        if ($hasAuthor -and $hasSource) {
+            $output += "- Author: $($parsed.Author) | Source: $($parsed.Source)"
+        } elseif ($hasAuthor) {
+            $output += "- Author: $($parsed.Author)"
+        } elseif ($hasSource) {
+            $output += "- Source: $($parsed.Source)"
+        }
+    }
+
+    Set-Content -Path $exportFile -Value $output -Encoding UTF8
+    Write-Host "Exported $($matched.Count) entries to $exportFile"
     exit 0
 }
 

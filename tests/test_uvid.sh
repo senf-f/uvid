@@ -242,6 +242,141 @@ test_delete_via_search() {
     assert_contains "$content" "beta entry" "beta entry remains"
 }
 
+# ---- Export ----
+
+test_export_creates_file() {
+    bash "$UVID" "first entry" -a "Author" -s "Source" > /dev/null
+    bash "$UVID" "second entry" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    assert_equals "true" "$([ -f "$export_file" ] && echo true || echo false)" "export file created"
+}
+
+test_export_contains_entries() {
+    bash "$UVID" "first entry" -a "Author" -s "Source" > /dev/null
+    bash "$UVID" "second entry" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "# Uvid Export" "header present"
+    assert_contains "$content" "2 entries" "entry count in header"
+    assert_contains "$content" "**[" "entry formatted with bold timestamp"
+    assert_contains "$content" "first entry" "first entry present"
+    assert_contains "$content" "second entry" "second entry present"
+}
+
+test_export_metadata_formatting() {
+    bash "$UVID" "with both" -a "John" -s "Blog" > /dev/null
+    bash "$UVID" "with author only" -a "Jane" > /dev/null
+    bash "$UVID" "with source only" -s "Book" > /dev/null
+    bash "$UVID" "with defaults" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "Author: John | Source: Blog" "both author and source shown with pipe"
+    assert_contains "$content" "Author: Jane" "author-only line present"
+    assert_not_contains "$content" "Author: Jane |" "no pipe when only author"
+    assert_contains "$content" "Source: Book" "source-only line present"
+    assert_not_contains "$content" "Author: ." "default author excluded"
+    assert_not_contains "$content" "Source: -" "default source excluded"
+}
+
+test_export_no_entries() {
+    local output=$(bash "$UVID" --export)
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    assert_contains "$output" "No entries" "no-match message shown"
+    assert_equals "false" "$([ -f "$export_file" ] && echo true || echo false)" "no file created when no entries"
+}
+
+test_export_across_years() {
+    echo "[15.06.2025 10:00] old entry [OldAuth] (OldSrc)" > "2025_uvid.log"
+    bash "$UVID" "new entry" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "old entry" "entry from 2025 included"
+    assert_contains "$content" "new entry" "entry from current year included"
+    assert_contains "$content" "2 entries" "count includes both years"
+}
+
+test_export_filter_search() {
+    bash "$UVID" "apple pie recipe" > /dev/null
+    bash "$UVID" "banana bread" > /dev/null
+    bash "$UVID" --export --search "apple" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "apple pie recipe" "search filter includes match"
+    assert_not_contains "$content" "banana bread" "search filter excludes non-match"
+    assert_contains "$content" "1 entries" "count reflects filter"
+    assert_contains "$content" '"apple"' "header shows search term"
+}
+
+test_export_filter_author() {
+    bash "$UVID" "entry one" -a "Plato" > /dev/null
+    bash "$UVID" "entry two" -a "Aristotle" > /dev/null
+    bash "$UVID" --export --author "Plato" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "entry one" "author filter includes match"
+    assert_not_contains "$content" "entry two" "author filter excludes non-match"
+    assert_contains "$content" "Plato" "header shows author"
+}
+
+test_export_filter_author_case_insensitive() {
+    bash "$UVID" "entry one" -a "Plato" > /dev/null
+    bash "$UVID" --export --author "plato" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "entry one" "author filter is case insensitive"
+}
+
+test_export_filter_year() {
+    echo "[15.06.2025 10:00] old entry [.] (-)" > "2025_uvid.log"
+    bash "$UVID" "new entry" > /dev/null
+    bash "$UVID" --export --year 2025 > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "old entry" "year filter includes matching year"
+    assert_not_contains "$content" "new entry" "year filter excludes other year"
+    assert_contains "$content" "2025" "header shows year"
+}
+
+test_export_filter_date_range() {
+    echo "[01.03.2025 10:00] march entry [.] (-)" > "2025_uvid.log"
+    echo "[15.06.2025 10:00] june entry [.] (-)" >> "2025_uvid.log"
+    echo "[01.09.2025 10:00] sept entry [.] (-)" >> "2025_uvid.log"
+    bash "$UVID" --export --from "01.01.2025" --to "30.06.2025" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "march entry" "date range includes march"
+    assert_contains "$content" "june entry" "date range includes june"
+    assert_not_contains "$content" "sept entry" "date range excludes september"
+    assert_contains "$content" "2 entries" "count reflects date filter"
+}
+
+test_export_filter_combined() {
+    bash "$UVID" "alpha by plato" -a "Plato" > /dev/null
+    bash "$UVID" "beta by plato" -a "Plato" > /dev/null
+    bash "$UVID" "alpha by jane" -a "Jane" > /dev/null
+    bash "$UVID" --export --search "alpha" --author "Plato" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "alpha by plato" "combined filter includes match"
+    assert_not_contains "$content" "beta by plato" "combined filter excludes search miss"
+    assert_not_contains "$content" "alpha by jane" "combined filter excludes author miss"
+    assert_contains "$content" "1 entries" "count reflects combined filter"
+}
+
+test_export_year_and_from_to_exclusive() {
+    local output=$(bash "$UVID" --export --year 2025 --from "01.01.2025" --to "31.12.2025" 2>&1)
+    assert_contains "$output" "cannot be combined" "year + from/to error message"
+}
+
+test_export_from_without_to() {
+    local output=$(bash "$UVID" --export --from "01.01.2025" 2>&1)
+    assert_contains "$output" "must both be provided" "from without to error message"
+}
+
 # ---- Run all ----
 
 run_test test_inline_text_only
@@ -262,6 +397,19 @@ run_test test_delete_removes_entry
 run_test test_delete_cancel_with_n
 run_test test_delete_default_confirm_is_yes
 run_test test_delete_via_search
+run_test test_export_creates_file
+run_test test_export_contains_entries
+run_test test_export_metadata_formatting
+run_test test_export_no_entries
+run_test test_export_across_years
+run_test test_export_filter_search
+run_test test_export_filter_author
+run_test test_export_filter_author_case_insensitive
+run_test test_export_filter_year
+run_test test_export_filter_date_range
+run_test test_export_filter_combined
+run_test test_export_year_and_from_to_exclusive
+run_test test_export_from_without_to
 
 echo ""
 echo "======================================"

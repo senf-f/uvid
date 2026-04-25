@@ -72,6 +72,23 @@ uvid -Delete
 ```
 Browse recent entries or search, then confirm deletion.
 
+### Export to Markdown
+```bash
+uvid --export                                       # all entries
+uvid --export --search "keyword"                    # filter by text
+uvid --export --author "Author Name"                # filter by author
+uvid --export --year 2025                           # filter by year
+uvid --export --from 01.03.2025 --to 15.06.2025    # filter by date range
+```
+```powershell
+uvid -Export
+uvid -Export -Search "keyword"
+uvid -Export -Author "Author Name"
+uvid -Export -Year 2025
+uvid -Export -From "01.03.2025" -To "15.06.2025"
+```
+Exports matching entries to `uvid_export_YYYY-MM-DD.md` in the current directory. Filters can be combined.
+
 ### Sync logs with VPS
 ```bash
 uvid --sync
@@ -106,6 +123,11 @@ uvid -Help
 | `--search` / `-Search` | Search all log files for a term |
 | `--edit` / `-Edit` | Edit an existing entry interactively |
 | `--delete` / `-Delete` | Delete an existing entry with confirmation |
+| `--export` / `-Export` | Export entries to Markdown file |
+| `--author` / `-Author` | Filter export by author |
+| `--year` / `-Year` | Filter export by year |
+| `--from` / `-From` | Start of date range filter |
+| `--to` / `-To` | End of date range filter |
 | `--sync` | Sync logs with VPS |
 | `--install` / `-Install` | Install uvid to your shell |
 | `--help` / `-Help` | Show help |
