@@ -13,6 +13,7 @@ ORIG_DIR="$(pwd)"
 
 setup() {
     TEST_DIR=$(mktemp -d)
+    export UVID_DIR="$TEST_DIR"
     cd "$TEST_DIR"
 }
 

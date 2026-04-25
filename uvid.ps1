@@ -17,6 +17,9 @@
     [string]$To
 )
 
+$UvidDir = if ($env:UVID_DIR) { $env:UVID_DIR } else { "$HOME/.uvid" }
+if (-not (Test-Path $UvidDir)) { New-Item $UvidDir -ItemType Directory -Force | Out-Null }
+
 $ScriptPath = $MyInvocation.MyCommand.Path
 
 if ($Help) {
@@ -44,7 +47,7 @@ if ($Help) {
     Write-Host "  -Install          Add uvid function to PowerShell profile"
     Write-Host "  -Help             Show this help message"
     Write-Host ""
-    Write-Host "Log file: YEAR_uvid.log (created in the current directory)"
+    Write-Host "Log file: ~/.uvid/YEAR_uvid.log"
     Write-Host ""
     Write-Host "Example:"
     Write-Host "  uvid `"some insight`" -s `"book title`" -a `"John Doe`""
@@ -66,7 +69,7 @@ if ($Install) {
 
 if ($PSBoundParameters.ContainsKey('List')) {
     $n = if ($List -gt 0) { $List } else { 10 }
-    $logFile = "$(Get-Date -Format 'yyyy')_uvid.log"
+    $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
     if (-not (Test-Path $logFile)) {
         Write-Host "No log file found for this year."
         exit 0
@@ -82,18 +85,18 @@ if ($PSBoundParameters.ContainsKey('Search')) {
         Write-Host "Usage: uvid -Search `"term`""
         exit 1
     }
-    $logFiles = Get-Item *_uvid.log -ErrorAction SilentlyContinue
+    $logFiles = Get-Item "$UvidDir/*_uvid.log" -ErrorAction SilentlyContinue
     if (-not $logFiles) {
         Write-Host "No log files found."
         exit 0
     }
-    Select-String -Path *_uvid.log -Pattern $Search -CaseSensitive:$false
+    Select-String -Path "$UvidDir/*_uvid.log" -Pattern $Search -CaseSensitive:$false
     exit 0
 }
 
 function Write-Entry {
     param([string]$Entry)
-    $logFile = "$(Get-Date -Format 'yyyy')_uvid.log"
+    $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
     if (-not (Test-Path $logFile)) { New-Item $logFile -ItemType File | Out-Null }
     Add-Content -Path $logFile -Value $Entry
     Write-Host ""
@@ -137,12 +140,12 @@ function Pick-Entry {
 
     if ($choice -eq "s") {
         $term = Read-Host "Search term"
-        $logFiles = Get-Item *_uvid.log -ErrorAction SilentlyContinue
+        $logFiles = Get-Item "$UvidDir/*_uvid.log" -ErrorAction SilentlyContinue
         if (-not $logFiles) {
             Write-Host "No log files found."
             exit 0
         }
-        $searchResults = Select-String -Path *_uvid.log -Pattern $term -CaseSensitive:$false
+        $searchResults = Select-String -Path "$UvidDir/*_uvid.log" -Pattern $term -CaseSensitive:$false
         if (-not $searchResults) {
             Write-Host "No matches found."
             exit 0
@@ -152,7 +155,7 @@ function Pick-Entry {
             $files += $m.Path
         }
     } else {
-        $logFile = "$(Get-Date -Format 'yyyy')_uvid.log"
+        $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
         if (-not (Test-Path $logFile)) {
             Write-Host "No log file found for this year."
             exit 0
@@ -287,9 +290,9 @@ if ($Export) {
 
     # Collect log files
     if ($Year -gt 0) {
-        $logFiles = Get-Item "${Year}_uvid.log" -ErrorAction SilentlyContinue
+        $logFiles = Get-Item "$UvidDir/${Year}_uvid.log" -ErrorAction SilentlyContinue
     } else {
-        $logFiles = Get-Item *_uvid.log -ErrorAction SilentlyContinue | Sort-Object Name
+        $logFiles = Get-Item "$UvidDir/*_uvid.log" -ErrorAction SilentlyContinue | Sort-Object Name
     }
 
     if (-not $logFiles) {
