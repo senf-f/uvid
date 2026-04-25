@@ -269,7 +269,7 @@ do_export() {
     fi
 
     # Validate: --from and --to must come together
-    if [ -n "$filter_from" ] && [ -z "$filter_to" ] || [ -z "$filter_from" ] && [ -n "$filter_to" ]; then
+    if { [ -n "$filter_from" ] && [ -z "$filter_to" ]; } || { [ -z "$filter_from" ] && [ -n "$filter_to" ]; }; then
         echo "Error: --from and --to must both be provided."
         exit 1
     fi

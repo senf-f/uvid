@@ -299,6 +299,84 @@ test_export_across_years() {
     assert_contains "$content" "2 entries" "count includes both years"
 }
 
+test_export_filter_search() {
+    bash "$UVID" "apple pie recipe" > /dev/null
+    bash "$UVID" "banana bread" > /dev/null
+    bash "$UVID" --export --search "apple" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "apple pie recipe" "search filter includes match"
+    assert_not_contains "$content" "banana bread" "search filter excludes non-match"
+    assert_contains "$content" "1 entries" "count reflects filter"
+    assert_contains "$content" '"apple"' "header shows search term"
+}
+
+test_export_filter_author() {
+    bash "$UVID" "entry one" -a "Plato" > /dev/null
+    bash "$UVID" "entry two" -a "Aristotle" > /dev/null
+    bash "$UVID" --export --author "Plato" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "entry one" "author filter includes match"
+    assert_not_contains "$content" "entry two" "author filter excludes non-match"
+    assert_contains "$content" "Plato" "header shows author"
+}
+
+test_export_filter_author_case_insensitive() {
+    bash "$UVID" "entry one" -a "Plato" > /dev/null
+    bash "$UVID" --export --author "plato" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "entry one" "author filter is case insensitive"
+}
+
+test_export_filter_year() {
+    echo "[15.06.2025 10:00] old entry [.] (-)" > "2025_uvid.log"
+    bash "$UVID" "new entry" > /dev/null
+    bash "$UVID" --export --year 2025 > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "old entry" "year filter includes matching year"
+    assert_not_contains "$content" "new entry" "year filter excludes other year"
+    assert_contains "$content" "2025" "header shows year"
+}
+
+test_export_filter_date_range() {
+    echo "[01.03.2025 10:00] march entry [.] (-)" > "2025_uvid.log"
+    echo "[15.06.2025 10:00] june entry [.] (-)" >> "2025_uvid.log"
+    echo "[01.09.2025 10:00] sept entry [.] (-)" >> "2025_uvid.log"
+    bash "$UVID" --export --from "01.01.2025" --to "30.06.2025" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "march entry" "date range includes march"
+    assert_contains "$content" "june entry" "date range includes june"
+    assert_not_contains "$content" "sept entry" "date range excludes september"
+    assert_contains "$content" "2 entries" "count reflects date filter"
+}
+
+test_export_filter_combined() {
+    bash "$UVID" "alpha by plato" -a "Plato" > /dev/null
+    bash "$UVID" "beta by plato" -a "Plato" > /dev/null
+    bash "$UVID" "alpha by jane" -a "Jane" > /dev/null
+    bash "$UVID" --export --search "alpha" --author "Plato" > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "alpha by plato" "combined filter includes match"
+    assert_not_contains "$content" "beta by plato" "combined filter excludes search miss"
+    assert_not_contains "$content" "alpha by jane" "combined filter excludes author miss"
+    assert_contains "$content" "1 entries" "count reflects combined filter"
+}
+
+test_export_year_and_from_to_exclusive() {
+    local output=$(bash "$UVID" --export --year 2025 --from "01.01.2025" --to "31.12.2025" 2>&1)
+    assert_contains "$output" "cannot be combined" "year + from/to error message"
+}
+
+test_export_from_without_to() {
+    local output=$(bash "$UVID" --export --from "01.01.2025" 2>&1)
+    assert_contains "$output" "must both be provided" "from without to error message"
+}
+
 # ---- Run all ----
 
 run_test test_inline_text_only
@@ -324,6 +402,14 @@ run_test test_export_contains_entries
 run_test test_export_metadata_formatting
 run_test test_export_no_entries
 run_test test_export_across_years
+run_test test_export_filter_search
+run_test test_export_filter_author
+run_test test_export_filter_author_case_insensitive
+run_test test_export_filter_year
+run_test test_export_filter_date_range
+run_test test_export_filter_combined
+run_test test_export_year_and_from_to_exclusive
+run_test test_export_from_without_to
 
 echo ""
 echo "======================================"
