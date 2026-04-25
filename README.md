@@ -133,7 +133,7 @@ uvid -Help
 | `--help` / `-Help` | Show help |
 
 ## Log file
-Entries are saved to `YEAR_uvid.log` in the current directory. A new file is created each year.
+Entries are saved to `~/.uvid/YEAR_uvid.log`. A new file is created each year. The directory is auto-created on first run.
 
 ## Example
 ```bash

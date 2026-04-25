@@ -47,7 +47,7 @@ if ($Help) {
     Write-Host "  -Install          Add uvid function to PowerShell profile"
     Write-Host "  -Help             Show this help message"
     Write-Host ""
-    Write-Host "Log file: YEAR_uvid.log (created in the current directory)"
+    Write-Host "Log file: ~/.uvid/YEAR_uvid.log"
     Write-Host ""
     Write-Host "Example:"
     Write-Host "  uvid `"some insight`" -s `"book title`" -a `"John Doe`""

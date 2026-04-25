@@ -31,7 +31,7 @@ show_help() {
     echo "  --install         Install uvid to /usr/local/bin"
     echo "  --help, -h        Show this help message"
     echo ""
-    echo "Log file: YEAR_uvid.log (created in the current directory)"
+    echo "Log file: ~/.uvid/YEAR_uvid.log"
     echo ""
     echo "Example:"
     echo "  uvid \"some insight\" -s \"book title\" -a \"John Doe\""
