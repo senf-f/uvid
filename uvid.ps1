@@ -279,13 +279,43 @@ if ($Delete) {
 
 if ($Sync) {
     $scriptDir = Split-Path $ScriptPath
-    $syncScript = Join-Path $scriptDir "uvid-sync.sh"
-    if (-not (Test-Path $syncScript)) {
-        Write-Host "uvid-sync.sh not found in $scriptDir"
+    $confFile = Join-Path $scriptDir ".uvid-sync.conf"
+
+    $VpsHost = ""
+    $VpsUser = "root"
+    $VpsDir = "~/uvid-logs"
+
+    if (Test-Path $confFile) {
+        foreach ($line in Get-Content $confFile) {
+            if ($line -match '^\s*VPS_HOST\s*=\s*"?([^"]+)"?\s*$') { $VpsHost = $Matches[1] }
+            if ($line -match '^\s*VPS_USER\s*=\s*"?([^"]+)"?\s*$') { $VpsUser = $Matches[1] }
+            if ($line -match '^\s*VPS_DIR\s*=\s*"?([^"]+)"?\s*$') { $VpsDir = $Matches[1] }
+        }
+    }
+
+    if (-not $VpsHost) {
+        Write-Host "VPS_HOST is not set. Create $confFile with:"
+        Write-Host "  VPS_HOST=`"your-host-or-alias`""
         exit 1
     }
-    bash ($syncScript -replace '\\', '/')
-    exit $LASTEXITCODE
+
+    $remote = "$VpsUser@$VpsHost"
+
+    Write-Host "Pushing local logs to VPS..."
+    ssh $remote "mkdir -p $VpsDir/incoming"
+    scp "$UvidDir/*_uvid.log" "${remote}:$VpsDir/incoming/"
+
+    Write-Host "Merging on VPS..."
+    ssh $remote "bash $VpsDir/uvid-merge.sh $VpsDir/incoming"
+
+    Write-Host "Cleaning up incoming..."
+    ssh $remote "rm -f $VpsDir/incoming/*_uvid.log"
+
+    Write-Host "Pulling merged logs..."
+    scp "${remote}:$VpsDir/*_uvid.log" "$UvidDir/"
+
+    Write-Host "Sync complete."
+    exit 0
 }
 
 if ($Export) {
