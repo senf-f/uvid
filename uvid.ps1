@@ -414,6 +414,12 @@ if ($PSBoundParameters.Count -eq 0) {
         exit 1
     }
 
+    if ($TextEntry -match '^-') {
+        Write-Host "Unknown flag: $TextEntry"
+        Write-Host "Run 'uvid -Help' for usage."
+        exit 1
+    }
+
     $entry = "[$timestamp] $TextEntry"
     if ($a) { $entry += " [$a]" }
     if ($s) { $entry += " ($s)" }
