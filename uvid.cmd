@@ -11,6 +11,7 @@ for %%A in (%*) do (
     ) else if "!ARG!"=="--install" (set "ARG=-Install"
     ) else if "!ARG!"=="--edit" (set "ARG=-Edit"
     ) else if "!ARG!"=="--delete" (set "ARG=-Delete"
+    ) else if "!ARG!"=="--sync" (set "ARG=-Sync"
     ) else if "!ARG!"=="--export" (set "ARG=-Export"
     ) else if "!ARG!"=="--author" (set "ARG=-Author"
     ) else if "!ARG!"=="--year" (set "ARG=-Year"

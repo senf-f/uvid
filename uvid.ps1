@@ -11,6 +11,7 @@
     [switch]$Edit,
     [switch]$Delete,
     [switch]$Export,
+    [switch]$Sync,
     [string]$Author,
     [int]$Year = 0,
     [string]$From,
@@ -44,6 +45,7 @@ if ($Help) {
     Write-Host "    -Author `"name`"   Filter by author"
     Write-Host "    -Year YYYY       Filter by year"
     Write-Host "    -From/-To        Filter by date range (DD.MM.YYYY)"
+    Write-Host "  -Sync             Sync logs with VPS"
     Write-Host "  -Install          Add uvid function to PowerShell profile"
     Write-Host "  -Help             Show this help message"
     Write-Host ""
@@ -273,6 +275,17 @@ if ($Delete) {
 
     Write-Host "Deleted."
     exit 0
+}
+
+if ($Sync) {
+    $scriptDir = Split-Path $ScriptPath
+    $syncScript = Join-Path $scriptDir "uvid-sync.sh"
+    if (-not (Test-Path $syncScript)) {
+        Write-Host "uvid-sync.sh not found in $scriptDir"
+        exit 1
+    }
+    bash $syncScript
+    exit $LASTEXITCODE
 }
 
 if ($Export) {
