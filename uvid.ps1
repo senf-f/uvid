@@ -284,11 +284,7 @@ if ($Sync) {
         Write-Host "uvid-sync.sh not found in $scriptDir"
         exit 1
     }
-    $unixPath = $syncScript -replace '\\', '/'
-    if ($unixPath -match '^([A-Za-z]):(.*)') {
-        $unixPath = '/' + $Matches[1].ToLower() + $Matches[2]
-    }
-    bash $unixPath
+    bash ($syncScript -replace '\\', '/')
     exit $LASTEXITCODE
 }
 
