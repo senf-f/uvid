@@ -21,6 +21,8 @@
 $UvidDir = if ($env:UVID_DIR) { $env:UVID_DIR } else { "$HOME/.uvid" }
 if (-not (Test-Path $UvidDir)) { New-Item $UvidDir -ItemType Directory -Force | Out-Null }
 
+$Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+
 $ScriptPath = $MyInvocation.MyCommand.Path
 
 if ($Help) {
@@ -78,7 +80,7 @@ if ($PSBoundParameters.ContainsKey('List')) {
     }
     Write-Host "Last $n entries from $logFile`:"
     Write-Host ""
-    Get-Content $logFile -Tail $n
+    Get-Content $logFile -Tail $n -Encoding UTF8
     exit 0
 }
 
@@ -100,7 +102,7 @@ function Write-Entry {
     param([string]$Entry)
     $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
     if (-not (Test-Path $logFile)) { New-Item $logFile -ItemType File | Out-Null }
-    Add-Content -Path $logFile -Value $Entry
+    [System.IO.File]::AppendAllText($logFile, "$Entry`n", $Utf8NoBom)
     Write-Host ""
     Write-Host "Logged: $Entry"
     Write-Host "File:   $logFile"
@@ -162,7 +164,7 @@ function Pick-Entry {
             Write-Host "No log file found for this year."
             exit 0
         }
-        $content = Get-Content $logFile
+        $content = Get-Content $logFile -Encoding UTF8
         if (-not $content) {
             Write-Host "No entries found."
             exit 0
@@ -230,7 +232,7 @@ if ($Edit) {
     if ($newSource) { $newEntry += " ($newSource)" }
 
     # Replace in file (only first match)
-    $content = Get-Content $picked.File
+    $content = Get-Content $picked.File -Encoding UTF8
     $replaced = $false
     $newContent = @()
     foreach ($line in $content) {
@@ -241,7 +243,7 @@ if ($Edit) {
             $newContent += $line
         }
     }
-    Set-Content -Path $picked.File -Value $newContent -Encoding UTF8
+    [System.IO.File]::WriteAllLines($picked.File, $newContent, $Utf8NoBom)
 
     Write-Host ""
     Write-Host "Updated: $newEntry"
@@ -261,7 +263,7 @@ if ($Delete) {
         exit 0
     }
 
-    $content = Get-Content $picked.File
+    $content = Get-Content $picked.File -Encoding UTF8
     $deleted = $false
     $newContent = @()
     foreach ($line in $content) {
@@ -271,7 +273,7 @@ if ($Delete) {
             $newContent += $line
         }
     }
-    Set-Content -Path $picked.File -Value $newContent -Encoding UTF8
+    [System.IO.File]::WriteAllLines($picked.File, $newContent, $Utf8NoBom)
 
     Write-Host "Deleted."
     exit 0
@@ -354,7 +356,7 @@ if ($Export) {
     # Collect matching entries
     $matched = @()
     foreach ($file in $logFiles) {
-        foreach ($line in (Get-Content $file.FullName)) {
+        foreach ($line in (Get-Content $file.FullName -Encoding UTF8)) {
             if (-not $line) { continue }
 
             # Search filter
@@ -425,7 +427,7 @@ if ($Export) {
         }
     }
 
-    Set-Content -Path $exportFile -Value $output -Encoding UTF8
+    [System.IO.File]::WriteAllLines($exportFile, $output, $Utf8NoBom)
     Write-Host "Exported $($matched.Count) entries to $exportFile"
     exit 0
 }

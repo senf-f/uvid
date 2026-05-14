@@ -2,6 +2,8 @@
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/uvid.sh"
 
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
 UVID_DIR="${UVID_DIR:-$HOME/.uvid}"
 mkdir -p "$UVID_DIR"
 
