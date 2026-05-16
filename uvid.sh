@@ -8,7 +8,7 @@ UVID_DIR="${UVID_DIR:-$HOME/.uvid}"
 mkdir -p "$UVID_DIR"
 
 show_help() {
-    echo "uvid - log timestamped entries to a yearly log file"
+    echo "uvid - log timestamped entries to a monthly log file"
     echo ""
     echo "Usage:"
     echo "  uvid \"text entry\" [-s \"source\"] [-a \"author\"]"
@@ -20,7 +20,7 @@ show_help() {
     echo "  -a \"author\"       Author of the entry (optional)"
     echo ""
     echo "Flags:"
-    echo "  --list [n]        Show last n entries from this year's log (default: 10)"
+    echo "  --list [n]        Show last n entries from this month's log (default: 10)"
     echo "  --search \"term\"   Search all log files for a term"
     echo "  --edit            Edit an existing entry"
     echo "  --delete          Delete an existing entry"
@@ -33,7 +33,7 @@ show_help() {
     echo "  --install         Install uvid to /usr/local/bin"
     echo "  --help, -h        Show this help message"
     echo ""
-    echo "Log file: ~/.uvid/YEAR_uvid.log"
+    echo "Log file: ~/.uvid/MM-YYYY_uvid.log"
     echo ""
     echo "Example:"
     echo "  uvid \"some insight\" -s \"book title\" -a \"John Doe\""
@@ -51,9 +51,9 @@ do_install() {
 
 show_list() {
     local n="${1:-10}"
-    local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
+    local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
     if [ ! -f "$log_file" ]; then
-        echo "No log file found for this year."
+        echo "No log file found for this month."
         exit 0
     fi
     echo "Last $n entries from $log_file:"
@@ -77,7 +77,7 @@ do_search() {
 
 log_entry() {
     local entry="$1"
-    local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
+    local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
     touch "$log_file"
     echo "$entry" >> "$log_file"
     echo ""
@@ -144,9 +144,9 @@ pick_entry() {
             exit 0
         fi
     else
-        local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
+        local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
         if [ ! -f "$log_file" ]; then
-            echo "No log file found for this year."
+            echo "No log file found for this month."
             exit 0
         fi
         while IFS= read -r line; do
@@ -286,10 +286,9 @@ do_export() {
     # Collect log files
     local log_files=()
     if [ -n "$filter_year" ]; then
-        local yf="$UVID_DIR/${filter_year}_uvid.log"
-        if [ -f "$yf" ]; then
-            log_files=("$yf")
-        fi
+        for f in $(ls "$UVID_DIR"/*-${filter_year}_uvid.log 2>/dev/null | sort); do
+            log_files+=("$f")
+        done
     else
         for f in $(ls "$UVID_DIR"/*_uvid.log 2>/dev/null | sort); do
             log_files+=("$f")

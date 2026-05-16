@@ -4,8 +4,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UVID="$SCRIPT_DIR/../uvid.sh"
-YEAR=$(date +'%Y')
-LOG_FILE="${YEAR}_uvid.log"
+MONTH_YEAR=$(date +'%m-%Y')
+LOG_FILE="${MONTH_YEAR}_uvid.log"
 
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -155,12 +155,12 @@ test_search_case_insensitive() {
     assert_contains "$output" "Hello World" "search is case insensitive"
 }
 
-test_search_across_years() {
-    echo "[15.06.2025 10:00] old entry" > "2025_uvid.log"
+test_search_across_months() {
+    echo "[15.06.2025 10:00] old entry" > "06-2025_uvid.log"
     bash "$UVID" "new entry about old things" > /dev/null
     local output=$(bash "$UVID" --search "entry")
-    assert_contains "$output" "old entry" "search finds in previous year"
-    assert_contains "$output" "new entry about old things" "search finds in current year"
+    assert_contains "$output" "old entry" "search finds in previous month"
+    assert_contains "$output" "new entry about old things" "search finds in current month"
 }
 
 # ---- Edit ----
@@ -289,15 +289,15 @@ test_export_no_entries() {
     assert_equals "false" "$([ -f "$export_file" ] && echo true || echo false)" "no file created when no entries"
 }
 
-test_export_across_years() {
-    echo "[15.06.2025 10:00] old entry [OldAuth] (OldSrc)" > "2025_uvid.log"
+test_export_across_months() {
+    echo "[15.06.2025 10:00] old entry [OldAuth] (OldSrc)" > "06-2025_uvid.log"
     bash "$UVID" "new entry" > /dev/null
     bash "$UVID" --export > /dev/null
     local export_file="uvid_export_$(date +'%Y-%m-%d').md"
     local content=$(cat "$export_file")
-    assert_contains "$content" "old entry" "entry from 2025 included"
-    assert_contains "$content" "new entry" "entry from current year included"
-    assert_contains "$content" "2 entries" "count includes both years"
+    assert_contains "$content" "old entry" "entry from other month included"
+    assert_contains "$content" "new entry" "entry from current month included"
+    assert_contains "$content" "2 entries" "count includes both months"
 }
 
 test_export_filter_search() {
@@ -332,7 +332,7 @@ test_export_filter_author_case_insensitive() {
 }
 
 test_export_filter_year() {
-    echo "[15.06.2025 10:00] old entry [.] (-)" > "2025_uvid.log"
+    echo "[15.06.2025 10:00] old entry [.] (-)" > "06-2025_uvid.log"
     bash "$UVID" "new entry" > /dev/null
     bash "$UVID" --export --year 2025 > /dev/null
     local export_file="uvid_export_$(date +'%Y-%m-%d').md"
@@ -343,9 +343,9 @@ test_export_filter_year() {
 }
 
 test_export_filter_date_range() {
-    echo "[01.03.2025 10:00] march entry [.] (-)" > "2025_uvid.log"
-    echo "[15.06.2025 10:00] june entry [.] (-)" >> "2025_uvid.log"
-    echo "[01.09.2025 10:00] sept entry [.] (-)" >> "2025_uvid.log"
+    echo "[01.03.2025 10:00] march entry [.] (-)" > "03-2025_uvid.log"
+    echo "[15.06.2025 10:00] june entry [.] (-)" > "06-2025_uvid.log"
+    echo "[01.09.2025 10:00] sept entry [.] (-)" > "09-2025_uvid.log"
     bash "$UVID" --export --from "01.01.2025" --to "30.06.2025" > /dev/null
     local export_file="uvid_export_$(date +'%Y-%m-%d').md"
     local content=$(cat "$export_file")
@@ -389,7 +389,7 @@ run_test test_list_with_count
 run_test test_list_no_log_file
 run_test test_search_finds_match
 run_test test_search_case_insensitive
-run_test test_search_across_years
+run_test test_search_across_months
 run_test test_edit_updates_text
 run_test test_edit_preserves_timestamp
 run_test test_edit_clears_author_with_space
@@ -402,7 +402,7 @@ run_test test_export_creates_file
 run_test test_export_contains_entries
 run_test test_export_metadata_formatting
 run_test test_export_no_entries
-run_test test_export_across_years
+run_test test_export_across_months
 run_test test_export_filter_search
 run_test test_export_filter_author
 run_test test_export_filter_author_case_insensitive

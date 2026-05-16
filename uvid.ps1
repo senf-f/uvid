@@ -38,7 +38,7 @@ if ($Help) {
     Write-Host "  -a `"author`"       Author of the entry (optional)"
     Write-Host ""
     Write-Host "Flags:"
-    Write-Host "  -List n           Show last n entries from this year's log"
+    Write-Host "  -List n           Show last n entries from this month's log"
     Write-Host "  -Search `"term`"    Search all log files for a term"
     Write-Host "  -Edit             Edit an existing entry"
     Write-Host "  -Delete           Delete an existing entry"
@@ -51,7 +51,7 @@ if ($Help) {
     Write-Host "  -Install          Add uvid function to PowerShell profile"
     Write-Host "  -Help             Show this help message"
     Write-Host ""
-    Write-Host "Log file: ~/.uvid/YEAR_uvid.log"
+    Write-Host "Log file: ~/.uvid/MM-YYYY_uvid.log"
     Write-Host ""
     Write-Host "Example:"
     Write-Host "  uvid `"some insight`" -s `"book title`" -a `"John Doe`""
@@ -73,9 +73,9 @@ if ($Install) {
 
 if ($PSBoundParameters.ContainsKey('List')) {
     $n = if ($List -gt 0) { $List } else { 10 }
-    $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
+    $logFile = "$UvidDir/$(Get-Date -Format 'MM-yyyy')_uvid.log"
     if (-not (Test-Path $logFile)) {
-        Write-Host "No log file found for this year."
+        Write-Host "No log file found for this month."
         exit 0
     }
     Write-Host "Last $n entries from $logFile`:"
@@ -100,7 +100,7 @@ if ($PSBoundParameters.ContainsKey('Search')) {
 
 function Write-Entry {
     param([string]$Entry)
-    $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
+    $logFile = "$UvidDir/$(Get-Date -Format 'MM-yyyy')_uvid.log"
     if (-not (Test-Path $logFile)) { New-Item $logFile -ItemType File | Out-Null }
     [System.IO.File]::AppendAllText($logFile, "$Entry`n", $Utf8NoBom)
     Write-Host ""
@@ -159,9 +159,9 @@ function Pick-Entry {
             $files += $m.Path
         }
     } else {
-        $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
+        $logFile = "$UvidDir/$(Get-Date -Format 'MM-yyyy')_uvid.log"
         if (-not (Test-Path $logFile)) {
-            Write-Host "No log file found for this year."
+            Write-Host "No log file found for this month."
             exit 0
         }
         $content = Get-Content $logFile -Encoding UTF8
@@ -335,7 +335,7 @@ if ($Export) {
 
     # Collect log files
     if ($Year -gt 0) {
-        $logFiles = Get-Item "$UvidDir/${Year}_uvid.log" -ErrorAction SilentlyContinue
+        $logFiles = Get-Item "$UvidDir/*-${Year}_uvid.log" -ErrorAction SilentlyContinue | Sort-Object Name
     } else {
         $logFiles = Get-Item "$UvidDir/*_uvid.log" -ErrorAction SilentlyContinue | Sort-Object Name
     }
