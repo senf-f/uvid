@@ -43,6 +43,8 @@ show_help() {
     echo "    --year YYYY       Filter by year"
     echo "    --from/--to       Filter by date range (DD.MM.YYYY)"
     echo "  --sync            Sync logs with VPS"
+    echo "  --set-device name Set device name for this machine"
+    echo "  --verbose         Show device tags in list/search output"
     echo "  --install         Install uvid to /usr/local/bin"
     echo "  --help, -h        Show this help message"
     echo ""
@@ -246,6 +248,7 @@ do_edit() {
     local new_entry="$p_timestamp $new_text"
     [ -n "$new_author" ] && new_entry="$new_entry [$new_author]"
     [ -n "$new_source" ] && new_entry="$new_entry ($new_source)"
+    [ -n "$p_device" ] && new_entry="$new_entry {$p_device}"
 
     # Replace in file using temp file
     local tmpfile=$(mktemp)

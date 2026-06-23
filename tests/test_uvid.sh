@@ -205,6 +205,16 @@ test_edit_keeps_all_on_empty_input() {
     assert_contains "$content" "(same source)" "source preserved"
 }
 
+test_edit_preserves_device_tag() {
+    bash "$UVID" --set-device laptop > /dev/null
+    bash "$UVID" "original" -a "auth" -s "src" > /dev/null
+    # Browse, select 1, change text, keep author, keep source
+    printf "\n1\nedited text\n\n\n" | bash "$UVID" --edit > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "edited text" "text updated"
+    assert_contains "$content" "{laptop}" "device tag preserved after edit"
+}
+
 # ---- Delete ----
 
 test_delete_removes_entry() {
@@ -498,6 +508,7 @@ run_test test_edit_updates_text
 run_test test_edit_preserves_timestamp
 run_test test_edit_clears_author_with_space
 run_test test_edit_keeps_all_on_empty_input
+run_test test_edit_preserves_device_tag
 run_test test_delete_removes_entry
 run_test test_delete_cancel_with_n
 run_test test_delete_default_confirm_is_yes
