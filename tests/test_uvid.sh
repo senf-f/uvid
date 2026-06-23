@@ -431,6 +431,38 @@ test_device_file_overridden_by_env() {
     assert_contains "$content" "{env-dev}" "env var overrides file"
 }
 
+# ---- Display (device stripping) ----
+
+test_list_hides_device_by_default() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "visible text" > /dev/null
+    local output=$(bash "$UVID" --list)
+    assert_contains "$output" "visible text" "text shown in list"
+    assert_not_contains "$output" "{mypc}" "device tag hidden in list"
+}
+
+test_list_verbose_shows_device() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "visible text" > /dev/null
+    local output=$(bash "$UVID" --list --verbose)
+    assert_contains "$output" "{mypc}" "device tag shown with --verbose"
+}
+
+test_search_hides_device_by_default() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "searchable text" > /dev/null
+    local output=$(bash "$UVID" --search "searchable")
+    assert_contains "$output" "searchable text" "text shown in search"
+    assert_not_contains "$output" "{mypc}" "device tag hidden in search"
+}
+
+test_search_verbose_shows_device() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "searchable text" > /dev/null
+    local output=$(bash "$UVID" --search "searchable" --verbose)
+    assert_contains "$output" "{mypc}" "device tag shown in search with --verbose"
+}
+
 # ---- Run all ----
 
 run_test test_inline_text_only
@@ -472,6 +504,10 @@ run_test test_entry_no_device_when_not_set
 run_test test_entry_has_seconds_in_timestamp
 run_test test_device_from_env_var
 run_test test_device_file_overridden_by_env
+run_test test_list_hides_device_by_default
+run_test test_list_verbose_shows_device
+run_test test_search_hides_device_by_default
+run_test test_search_verbose_shows_device
 
 echo ""
 echo "======================================"

@@ -64,6 +64,7 @@ do_install() {
 
 show_list() {
     local n="${1:-10}"
+    local verbose="$2"
     local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
     if [ ! -f "$log_file" ]; then
         echo "No log file found for this month."
@@ -71,11 +72,16 @@ show_list() {
     fi
     echo "Last $n entries from $log_file:"
     echo ""
-    tail -n "$n" "$log_file"
+    if [ "$verbose" = "true" ]; then
+        tail -n "$n" "$log_file"
+    else
+        tail -n "$n" "$log_file" | strip_device_tag
+    fi
 }
 
 do_search() {
     local term="$1"
+    local verbose="$2"
     if [ -z "$term" ]; then
         echo "Usage: uvid --search \"term\""
         exit 1
@@ -85,7 +91,11 @@ do_search() {
         echo "No log files found."
         exit 0
     fi
-    grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log
+    if [ "$verbose" = "true" ]; then
+        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log
+    else
+        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log | strip_device_tag
+    fi
 }
 
 log_entry() {
@@ -103,6 +113,7 @@ parse_entry() {
     p_timestamp=""
     p_source=""
     p_author=""
+    p_device=""
     local ts_re='^\[([0-9.]+[[:space:]][0-9:]+)\]'
     if [[ "$line" =~ $ts_re ]]; then
         p_timestamp="[${BASH_REMATCH[1]}]"
@@ -112,6 +123,14 @@ parse_entry() {
     local rest="$line"
     if [ -n "$p_timestamp" ]; then
         rest="${rest:${#p_timestamp}+1}"
+    fi
+
+    # Extract device tag (trailing {name})
+    local dev_re='[{]([^}]+)[}]$'
+    if [[ "$rest" =~ $dev_re ]]; then
+        p_device="${BASH_REMATCH[1]}"
+        local dev_suffix=" {$p_device}"
+        rest="${rest:0:${#rest}-${#dev_suffix}}"
     fi
 
     local src_re='[(]([^)]+)[)]$'
@@ -129,6 +148,10 @@ parse_entry() {
     fi
 
     p_text=$(echo "$rest" | sed 's/[[:space:]]*$//')
+}
+
+strip_device_tag() {
+    sed 's/ {[a-z0-9-]*}$//'
 }
 
 pick_entry() {
@@ -422,10 +445,16 @@ case $1 in
         do_install; exit 0 ;;
     --list)
         n=10
-        [[ "$2" =~ ^[0-9]+$ ]] && n="$2"
-        show_list "$n"; exit 0 ;;
+        verbose=false
+        shift
+        [[ "$1" =~ ^[0-9]+$ ]] && { n="$1"; shift; }
+        [[ "$1" == "--verbose" ]] && verbose=true
+        show_list "$n" "$verbose"; exit 0 ;;
     --search)
-        do_search "$2"; exit 0 ;;
+        shift; term="$1"; shift
+        verbose=false
+        [[ "$1" == "--verbose" ]] && verbose=true
+        do_search "$term" "$verbose"; exit 0 ;;
     --edit)
         do_edit; exit 0 ;;
     --delete)
