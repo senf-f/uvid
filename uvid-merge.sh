@@ -2,9 +2,10 @@
 # Merges incoming uvid log files with canonical copies.
 #
 # Strategy:
-#   - Union of entries, identified by timestamp (the [DD.MM.YYYY HH:MM] prefix).
-#   - If the same timestamp exists in both canonical and incoming, the
-#     incoming version wins (so edits propagate across machines).
+#   - Entries with {device} tags: dedup by timestamp + device.
+#     Same timestamp + same device = incoming wins (edit propagation).
+#     Same timestamp + different device = both kept.
+#   - Entries without {device}: dedup by full line content.
 #   - Original insertion order is preserved (no sorting).
 #   - New incoming entries (timestamps not in canonical) are appended at the end.
 #

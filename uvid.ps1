@@ -34,6 +34,8 @@ function Get-UvidDevice {
         $name = (Get-Content $deviceFile -Encoding UTF8).Trim()
         if ($name -match '^[a-z0-9-]+$') { return $name }
     }
+    $hostName = ($env:COMPUTERNAME ?? (hostname)).ToLower()
+    if ($hostName -match '^[a-z0-9-]+$') { return $hostName }
     return ""
 }
 

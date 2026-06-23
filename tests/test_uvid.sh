@@ -14,6 +14,7 @@ ORIG_DIR="$(pwd)"
 setup() {
     TEST_DIR=$(mktemp -d)
     export UVID_DIR="$TEST_DIR"
+    unset UVID_DEVICE
     cd "$TEST_DIR"
 }
 
@@ -433,10 +434,16 @@ test_entry_includes_device_when_set() {
     assert_contains "$content" "{work}" "entry contains device tag"
 }
 
-test_entry_no_device_when_not_set() {
+test_entry_uses_hostname_fallback() {
     bash "$UVID" "test entry" > /dev/null
     local content=$(cat "$LOG_FILE")
-    assert_not_contains "$content" "{" "no device tag without config"
+    # Device should default to hostname (lowercased) if not explicitly set
+    local hostname_lower=$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    if [[ "$hostname_lower" =~ ^[a-z0-9-]+$ ]]; then
+        assert_contains "$content" "{$hostname_lower}" "hostname used as device fallback"
+    else
+        assert_not_contains "$content" "{" "no device tag if hostname invalid"
+    fi
 }
 
 test_entry_has_seconds_in_timestamp() {
@@ -532,7 +539,7 @@ run_test test_set_device_creates_file
 run_test test_set_device_rejects_invalid
 run_test test_set_device_rejects_uppercase
 run_test test_entry_includes_device_when_set
-run_test test_entry_no_device_when_not_set
+run_test test_entry_uses_hostname_fallback
 run_test test_entry_has_seconds_in_timestamp
 run_test test_device_from_env_var
 run_test test_device_file_overridden_by_env

@@ -13,6 +13,8 @@ get_device() {
         device="$UVID_DEVICE"
     elif [ -f "$UVID_DIR/.uvid-device" ]; then
         device=$(cat "$UVID_DIR/.uvid-device")
+    else
+        device=$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')
     fi
     if [ -n "$device" ] && [[ ! "$device" =~ ^[a-z0-9-]+$ ]]; then
         device=""
