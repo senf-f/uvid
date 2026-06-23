@@ -7,8 +7,23 @@ export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 UVID_DIR="${UVID_DIR:-$HOME/.uvid}"
 mkdir -p "$UVID_DIR"
 
+get_device() {
+    local device=""
+    if [ -n "$UVID_DEVICE" ]; then
+        device="$UVID_DEVICE"
+    elif [ -f "$UVID_DIR/.uvid-device" ]; then
+        device=$(cat "$UVID_DIR/.uvid-device")
+    else
+        device=$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    fi
+    if [ -n "$device" ] && [[ ! "$device" =~ ^[a-z0-9-]+$ ]]; then
+        device=""
+    fi
+    echo "$device"
+}
+
 show_help() {
-    echo "uvid - log timestamped entries to a yearly log file"
+    echo "uvid - log timestamped entries to a monthly log file"
     echo ""
     echo "Usage:"
     echo "  uvid \"text entry\" [-s \"source\"] [-a \"author\"]"
@@ -20,7 +35,7 @@ show_help() {
     echo "  -a \"author\"       Author of the entry (optional)"
     echo ""
     echo "Flags:"
-    echo "  --list [n]        Show last n entries from this year's log (default: 10)"
+    echo "  --list [n]        Show last n entries from this month's log (default: 10)"
     echo "  --search \"term\"   Search all log files for a term"
     echo "  --edit            Edit an existing entry"
     echo "  --delete          Delete an existing entry"
@@ -30,10 +45,12 @@ show_help() {
     echo "    --year YYYY       Filter by year"
     echo "    --from/--to       Filter by date range (DD.MM.YYYY)"
     echo "  --sync            Sync logs with VPS"
+    echo "  --set-device name Set device name for this machine"
+    echo "  --verbose         Show device tags in list/search output"
     echo "  --install         Install uvid to /usr/local/bin"
     echo "  --help, -h        Show this help message"
     echo ""
-    echo "Log file: ~/.uvid/YEAR_uvid.log"
+    echo "Log file: ~/.uvid/MM-YYYY_uvid.log"
     echo ""
     echo "Example:"
     echo "  uvid \"some insight\" -s \"book title\" -a \"John Doe\""
@@ -51,18 +68,24 @@ do_install() {
 
 show_list() {
     local n="${1:-10}"
-    local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
+    local verbose="$2"
+    local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
     if [ ! -f "$log_file" ]; then
-        echo "No log file found for this year."
+        echo "No log file found for this month."
         exit 0
     fi
     echo "Last $n entries from $log_file:"
     echo ""
-    tail -n "$n" "$log_file"
+    if [ "$verbose" = "true" ]; then
+        tail -n "$n" "$log_file"
+    else
+        tail -n "$n" "$log_file" | strip_device_tag
+    fi
 }
 
 do_search() {
     local term="$1"
+    local verbose="$2"
     if [ -z "$term" ]; then
         echo "Usage: uvid --search \"term\""
         exit 1
@@ -72,12 +95,16 @@ do_search() {
         echo "No log files found."
         exit 0
     fi
-    grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log
+    if [ "$verbose" = "true" ]; then
+        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log
+    else
+        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log | strip_device_tag
+    fi
 }
 
 log_entry() {
     local entry="$1"
-    local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
+    local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
     touch "$log_file"
     echo "$entry" >> "$log_file"
     echo ""
@@ -90,6 +117,7 @@ parse_entry() {
     p_timestamp=""
     p_source=""
     p_author=""
+    p_device=""
     local ts_re='^\[([0-9.]+[[:space:]][0-9:]+)\]'
     if [[ "$line" =~ $ts_re ]]; then
         p_timestamp="[${BASH_REMATCH[1]}]"
@@ -99,6 +127,14 @@ parse_entry() {
     local rest="$line"
     if [ -n "$p_timestamp" ]; then
         rest="${rest:${#p_timestamp}+1}"
+    fi
+
+    # Extract device tag (trailing {name})
+    local dev_re='[{]([^}]+)[}]$'
+    if [[ "$rest" =~ $dev_re ]]; then
+        p_device="${BASH_REMATCH[1]}"
+        local dev_suffix=" {$p_device}"
+        rest="${rest:0:${#rest}-${#dev_suffix}}"
     fi
 
     local src_re='[(]([^)]+)[)]$'
@@ -116,6 +152,10 @@ parse_entry() {
     fi
 
     p_text=$(echo "$rest" | sed 's/[[:space:]]*$//')
+}
+
+strip_device_tag() {
+    sed 's/ {[a-z0-9-]*}$//'
 }
 
 pick_entry() {
@@ -144,9 +184,9 @@ pick_entry() {
             exit 0
         fi
     else
-        local log_file="$UVID_DIR/$(date +'%Y')_uvid.log"
+        local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
         if [ ! -f "$log_file" ]; then
-            echo "No log file found for this year."
+            echo "No log file found for this month."
             exit 0
         fi
         while IFS= read -r line; do
@@ -210,6 +250,7 @@ do_edit() {
     local new_entry="$p_timestamp $new_text"
     [ -n "$new_author" ] && new_entry="$new_entry [$new_author]"
     [ -n "$new_source" ] && new_entry="$new_entry ($new_source)"
+    [ -n "$p_device" ] && new_entry="$new_entry {$p_device}"
 
     # Replace in file using temp file
     local tmpfile=$(mktemp)
@@ -286,10 +327,9 @@ do_export() {
     # Collect log files
     local log_files=()
     if [ -n "$filter_year" ]; then
-        local yf="$UVID_DIR/${filter_year}_uvid.log"
-        if [ -f "$yf" ]; then
-            log_files=("$yf")
-        fi
+        for f in $(ls "$UVID_DIR"/*-${filter_year}_uvid.log 2>/dev/null | sort); do
+            log_files+=("$f")
+        done
     else
         for f in $(ls "$UVID_DIR"/*_uvid.log 2>/dev/null | sort); do
             log_files+=("$f")
@@ -394,13 +434,16 @@ do_export() {
             elif $has_source; then
                 echo "- Source: $p_source"
             fi
+            if [ -n "$p_device" ]; then
+                echo "- Device: $p_device"
+            fi
         done
     } > "$export_file"
 
     echo "Exported ${#matched[@]} entries to $export_file"
 }
 
-timestamp=$(date +'%d.%m.%Y %H:%M')
+timestamp=$(date +'%d.%m.%Y %H:%M:%S')
 
 # Handle special flags
 case $1 in
@@ -410,10 +453,16 @@ case $1 in
         do_install; exit 0 ;;
     --list)
         n=10
-        [[ "$2" =~ ^[0-9]+$ ]] && n="$2"
-        show_list "$n"; exit 0 ;;
+        verbose=false
+        shift
+        [[ "$1" =~ ^[0-9]+$ ]] && { n="$1"; shift; }
+        [[ "$1" == "--verbose" ]] && verbose=true
+        show_list "$n" "$verbose"; exit 0 ;;
     --search)
-        do_search "$2"; exit 0 ;;
+        shift; term="$1"; shift
+        verbose=false
+        [[ "$1" == "--verbose" ]] && verbose=true
+        do_search "$term" "$verbose"; exit 0 ;;
     --edit)
         do_edit; exit 0 ;;
     --delete)
@@ -428,6 +477,15 @@ case $1 in
             echo "uvid-sync.sh not found or not executable."
             exit 1
         fi
+        exit 0 ;;
+    --set-device)
+        device_name="$2"
+        if [ -z "$device_name" ] || [[ ! "$device_name" =~ ^[a-z0-9-]+$ ]]; then
+            echo "Invalid device name. Use lowercase letters, numbers, and hyphens only."
+            exit 1
+        fi
+        echo "$device_name" > "$UVID_DIR/.uvid-device"
+        echo "Device set to: $device_name"
         exit 0 ;;
 esac
 
@@ -447,6 +505,8 @@ if [[ "$#" -eq 0 ]]; then
     entry="[$timestamp] $text_entry"
     [ -n "$author_input" ] && entry="$entry [$author_input]"
     [ -n "$source_input" ] && entry="$entry ($source_input)"
+    device=$(get_device)
+    [ -n "$device" ] && entry="$entry {$device}"
 
     log_entry "$entry"
 else
@@ -468,6 +528,8 @@ else
     entry="[$timestamp] $text_entry"
     [ -n "$author" ] && entry="$entry $author"
     [ -n "$source_text" ] && entry="$entry $source_text"
+    device=$(get_device)
+    [ -n "$device" ] && entry="$entry {$device}"
 
     log_entry "$entry"
 fi

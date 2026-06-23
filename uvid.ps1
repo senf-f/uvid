@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Position = 0)]
     [string]$TextEntry,
 
@@ -15,7 +15,9 @@
     [string]$Author,
     [int]$Year = 0,
     [string]$From,
-    [string]$To
+    [string]$To,
+    [string]$SetDevice,
+    [switch]$ShowDevice
 )
 
 $UvidDir = if ($env:UVID_DIR) { $env:UVID_DIR } else { "$HOME/.uvid" }
@@ -24,6 +26,18 @@ if (-not (Test-Path $UvidDir)) { New-Item $UvidDir -ItemType Directory -Force | 
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 $ScriptPath = $MyInvocation.MyCommand.Path
+
+function Get-UvidDevice {
+    if ($env:UVID_DEVICE) { return $env:UVID_DEVICE }
+    $deviceFile = "$UvidDir/.uvid-device"
+    if (Test-Path $deviceFile) {
+        $name = (Get-Content $deviceFile -Encoding UTF8).Trim()
+        if ($name -match '^[a-z0-9-]+$') { return $name }
+    }
+    $hostName = ($env:COMPUTERNAME ?? (hostname)).ToLower()
+    if ($hostName -match '^[a-z0-9-]+$') { return $hostName }
+    return ""
+}
 
 if ($Help) {
     Write-Host "uvid - log timestamped entries to a yearly log file"
@@ -38,7 +52,7 @@ if ($Help) {
     Write-Host "  -a `"author`"       Author of the entry (optional)"
     Write-Host ""
     Write-Host "Flags:"
-    Write-Host "  -List n           Show last n entries from this year's log"
+    Write-Host "  -List n           Show last n entries from this month's log"
     Write-Host "  -Search `"term`"    Search all log files for a term"
     Write-Host "  -Edit             Edit an existing entry"
     Write-Host "  -Delete           Delete an existing entry"
@@ -48,10 +62,12 @@ if ($Help) {
     Write-Host "    -Year YYYY       Filter by year"
     Write-Host "    -From/-To        Filter by date range (DD.MM.YYYY)"
     Write-Host "  -Sync             Sync logs with VPS"
+    Write-Host "  -SetDevice name   Set device name for this machine"
+    Write-Host "  -ShowDevice       Show device tags in list/search output"
     Write-Host "  -Install          Add uvid function to PowerShell profile"
     Write-Host "  -Help             Show this help message"
     Write-Host ""
-    Write-Host "Log file: ~/.uvid/YEAR_uvid.log"
+    Write-Host "Log file: ~/.uvid/MM-YYYY_uvid.log"
     Write-Host ""
     Write-Host "Example:"
     Write-Host "  uvid `"some insight`" -s `"book title`" -a `"John Doe`""
@@ -71,16 +87,31 @@ if ($Install) {
     exit 0
 }
 
+if ($SetDevice) {
+    if ($SetDevice -notmatch '^[a-z0-9-]+$') {
+        Write-Host "Invalid device name. Use lowercase letters, numbers, and hyphens only."
+        exit 1
+    }
+    [System.IO.File]::WriteAllText("$UvidDir/.uvid-device", $SetDevice, $Utf8NoBom)
+    Write-Host "Device set to: $SetDevice"
+    exit 0
+}
+
 if ($PSBoundParameters.ContainsKey('List')) {
     $n = if ($List -gt 0) { $List } else { 10 }
-    $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
+    $logFile = "$UvidDir/$(Get-Date -Format 'MM-yyyy')_uvid.log"
     if (-not (Test-Path $logFile)) {
-        Write-Host "No log file found for this year."
+        Write-Host "No log file found for this month."
         exit 0
     }
     Write-Host "Last $n entries from $logFile`:"
     Write-Host ""
-    Get-Content $logFile -Tail $n -Encoding UTF8
+    $lines = Get-Content $logFile -Tail $n -Encoding UTF8
+    if ($ShowDevice) {
+        $lines
+    } else {
+        $lines | ForEach-Object { $_ -replace ' \{[a-z0-9-]+\}$', '' }
+    }
     exit 0
 }
 
@@ -94,13 +125,21 @@ if ($PSBoundParameters.ContainsKey('Search')) {
         Write-Host "No log files found."
         exit 0
     }
-    Select-String -Path "$UvidDir/*_uvid.log" -Pattern $Search -CaseSensitive:$false
+    $results = Select-String -Path "$UvidDir/*_uvid.log" -Pattern $Search -CaseSensitive:$false
+    if ($ShowDevice) {
+        $results
+    } else {
+        $results | ForEach-Object {
+            $_.Line = $_.Line -replace ' \{[a-z0-9-]+\}$', ''
+            $_
+        }
+    }
     exit 0
 }
 
 function Write-Entry {
     param([string]$Entry)
-    $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
+    $logFile = "$UvidDir/$(Get-Date -Format 'MM-yyyy')_uvid.log"
     if (-not (Test-Path $logFile)) { New-Item $logFile -ItemType File | Out-Null }
     [System.IO.File]::AppendAllText($logFile, "$Entry`n", $Utf8NoBom)
     Write-Host ""
@@ -110,7 +149,7 @@ function Write-Entry {
 
 function Parse-Entry {
     param([string]$Line)
-    $result = @{ Timestamp = ""; Text = ""; Author = ""; Source = "" }
+    $result = @{ Timestamp = ""; Text = ""; Author = ""; Source = ""; Device = "" }
 
     # Extract timestamp
     if ($Line -match '^\[[\d.]+\s[\d:]+\]') {
@@ -118,6 +157,12 @@ function Parse-Entry {
     }
 
     $rest = ($Line -replace '^\[[\d.]+\s[\d:]+\]\s*', '')
+
+    # Extract device tag (trailing {name})
+    if ($rest -match '\{([a-z0-9-]+)\}$') {
+        $result.Device = $Matches[1]
+        $rest = ($rest -replace '\s*\{[a-z0-9-]+\}$', '')
+    }
 
     # Extract source (trailing parenthesized text)
     if ($rest -match '\(([^)]+)\)$') {
@@ -159,9 +204,9 @@ function Pick-Entry {
             $files += $m.Path
         }
     } else {
-        $logFile = "$UvidDir/$(Get-Date -Format 'yyyy')_uvid.log"
+        $logFile = "$UvidDir/$(Get-Date -Format 'MM-yyyy')_uvid.log"
         if (-not (Test-Path $logFile)) {
-            Write-Host "No log file found for this year."
+            Write-Host "No log file found for this month."
             exit 0
         }
         $content = Get-Content $logFile -Encoding UTF8
@@ -226,10 +271,11 @@ if ($Edit) {
         $newSource = ""
     }
 
-    # Reconstruct entry
+    # Reconstruct entry (preserve device tag)
     $newEntry = "$($parsed.Timestamp) $newText"
     if ($newAuthor) { $newEntry += " [$newAuthor]" }
     if ($newSource) { $newEntry += " ($newSource)" }
+    if ($parsed.Device) { $newEntry += " {$($parsed.Device)}" }
 
     # Replace in file (only first match)
     $content = Get-Content $picked.File -Encoding UTF8
@@ -335,7 +381,7 @@ if ($Export) {
 
     # Collect log files
     if ($Year -gt 0) {
-        $logFiles = Get-Item "$UvidDir/${Year}_uvid.log" -ErrorAction SilentlyContinue
+        $logFiles = Get-Item "$UvidDir/*-${Year}_uvid.log" -ErrorAction SilentlyContinue | Sort-Object Name
     } else {
         $logFiles = Get-Item "$UvidDir/*_uvid.log" -ErrorAction SilentlyContinue | Sort-Object Name
     }
@@ -392,12 +438,12 @@ if ($Export) {
     if ($Year -gt 0) {
         $parts += "$Year"
     } elseif ($From) {
-        $parts += "$From – $To"
+        $parts += "$From - $To"
     }
     if ($Author) { $parts += $Author }
     if ($Search) { $parts += "`"$Search`"" }
     if ($parts.Count -gt 0) {
-        $title += " — $($parts -join ', ')"
+        $title += " - $($parts -join ', ')"
     }
 
     $exportDate = Get-Date -Format "dd.MM.yyyy"
@@ -425,6 +471,10 @@ if ($Export) {
         } elseif ($hasSource) {
             $output += "- Source: $($parsed.Source)"
         }
+
+        if ($parsed.Device) {
+            $output += "- Device: $($parsed.Device)"
+        }
     }
 
     [System.IO.File]::WriteAllLines($exportFile, $output, $Utf8NoBom)
@@ -432,7 +482,7 @@ if ($Export) {
     exit 0
 }
 
-$timestamp = Get-Date -Format "dd.MM.yyyy HH:mm"
+$timestamp = Get-Date -Format "dd.MM.yyyy HH:mm:ss"
 
 if ($PSBoundParameters.Count -eq 0) {
     # Interactive mode
@@ -450,6 +500,8 @@ if ($PSBoundParameters.Count -eq 0) {
     $entry = "[$timestamp] $TextEntry"
     if ($authorInput) { $entry += " [$authorInput]" }
     if ($sourceInput) { $entry += " ($sourceInput)" }
+    $device = Get-UvidDevice
+    if ($device) { $entry += " {$device}" }
 
     Write-Entry $entry
 } else {
@@ -468,6 +520,8 @@ if ($PSBoundParameters.Count -eq 0) {
     $entry = "[$timestamp] $TextEntry"
     if ($a) { $entry += " [$a]" }
     if ($s) { $entry += " ($s)" }
+    $device = Get-UvidDevice
+    if ($device) { $entry += " {$device}" }
 
     Write-Entry $entry
 }

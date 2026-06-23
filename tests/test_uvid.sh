@@ -4,8 +4,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UVID="$SCRIPT_DIR/../uvid.sh"
-YEAR=$(date +'%Y')
-LOG_FILE="${YEAR}_uvid.log"
+MONTH_YEAR=$(date +'%m-%Y')
+LOG_FILE="${MONTH_YEAR}_uvid.log"
 
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -14,6 +14,7 @@ ORIG_DIR="$(pwd)"
 setup() {
     TEST_DIR=$(mktemp -d)
     export UVID_DIR="$TEST_DIR"
+    unset UVID_DEVICE
     cd "$TEST_DIR"
 }
 
@@ -155,12 +156,12 @@ test_search_case_insensitive() {
     assert_contains "$output" "Hello World" "search is case insensitive"
 }
 
-test_search_across_years() {
-    echo "[15.06.2025 10:00] old entry" > "2025_uvid.log"
+test_search_across_months() {
+    echo "[15.06.2025 10:00] old entry" > "06-2025_uvid.log"
     bash "$UVID" "new entry about old things" > /dev/null
     local output=$(bash "$UVID" --search "entry")
-    assert_contains "$output" "old entry" "search finds in previous year"
-    assert_contains "$output" "new entry about old things" "search finds in current year"
+    assert_contains "$output" "old entry" "search finds in previous month"
+    assert_contains "$output" "new entry about old things" "search finds in current month"
 }
 
 # ---- Edit ----
@@ -203,6 +204,16 @@ test_edit_keeps_all_on_empty_input() {
     assert_contains "$content" "untouched" "text preserved"
     assert_contains "$content" "[same author]" "author preserved"
     assert_contains "$content" "(same source)" "source preserved"
+}
+
+test_edit_preserves_device_tag() {
+    bash "$UVID" --set-device laptop > /dev/null
+    bash "$UVID" "original" -a "auth" -s "src" > /dev/null
+    # Browse, select 1, change text, keep author, keep source
+    printf "\n1\nedited text\n\n\n" | bash "$UVID" --edit > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "edited text" "text updated"
+    assert_contains "$content" "{laptop}" "device tag preserved after edit"
 }
 
 # ---- Delete ----
@@ -289,15 +300,15 @@ test_export_no_entries() {
     assert_equals "false" "$([ -f "$export_file" ] && echo true || echo false)" "no file created when no entries"
 }
 
-test_export_across_years() {
-    echo "[15.06.2025 10:00] old entry [OldAuth] (OldSrc)" > "2025_uvid.log"
+test_export_across_months() {
+    echo "[15.06.2025 10:00] old entry [OldAuth] (OldSrc)" > "06-2025_uvid.log"
     bash "$UVID" "new entry" > /dev/null
     bash "$UVID" --export > /dev/null
     local export_file="uvid_export_$(date +'%Y-%m-%d').md"
     local content=$(cat "$export_file")
-    assert_contains "$content" "old entry" "entry from 2025 included"
-    assert_contains "$content" "new entry" "entry from current year included"
-    assert_contains "$content" "2 entries" "count includes both years"
+    assert_contains "$content" "old entry" "entry from other month included"
+    assert_contains "$content" "new entry" "entry from current month included"
+    assert_contains "$content" "2 entries" "count includes both months"
 }
 
 test_export_filter_search() {
@@ -332,7 +343,7 @@ test_export_filter_author_case_insensitive() {
 }
 
 test_export_filter_year() {
-    echo "[15.06.2025 10:00] old entry [.] (-)" > "2025_uvid.log"
+    echo "[15.06.2025 10:00] old entry [.] (-)" > "06-2025_uvid.log"
     bash "$UVID" "new entry" > /dev/null
     bash "$UVID" --export --year 2025 > /dev/null
     local export_file="uvid_export_$(date +'%Y-%m-%d').md"
@@ -343,9 +354,9 @@ test_export_filter_year() {
 }
 
 test_export_filter_date_range() {
-    echo "[01.03.2025 10:00] march entry [.] (-)" > "2025_uvid.log"
-    echo "[15.06.2025 10:00] june entry [.] (-)" >> "2025_uvid.log"
-    echo "[01.09.2025 10:00] sept entry [.] (-)" >> "2025_uvid.log"
+    echo "[01.03.2025 10:00] march entry [.] (-)" > "03-2025_uvid.log"
+    echo "[15.06.2025 10:00] june entry [.] (-)" > "06-2025_uvid.log"
+    echo "[01.09.2025 10:00] sept entry [.] (-)" > "09-2025_uvid.log"
     bash "$UVID" --export --from "01.01.2025" --to "30.06.2025" > /dev/null
     local export_file="uvid_export_$(date +'%Y-%m-%d').md"
     local content=$(cat "$export_file")
@@ -378,6 +389,116 @@ test_export_from_without_to() {
     assert_contains "$output" "must both be provided" "from without to error message"
 }
 
+# ---- Export with device ----
+
+test_export_includes_device() {
+    bash "$UVID" --set-device laptop > /dev/null
+    bash "$UVID" "exported entry" -a "Auth" -s "Src" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "Device: laptop" "export shows device"
+}
+
+test_export_no_device_when_missing() {
+    echo "[15.06.2025 10:00] old entry [Auth] (Src)" > "06-2025_uvid.log"
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_not_contains "$content" "Device:" "no device line for old entries"
+}
+
+# ---- Device ----
+
+test_set_device_creates_file() {
+    bash "$UVID" --set-device laptop > /dev/null
+    local content=$(cat "$UVID_DIR/.uvid-device")
+    assert_equals "laptop" "$content" "device file contains device name"
+}
+
+test_set_device_rejects_invalid() {
+    local output=$(bash "$UVID" --set-device "bad name" 2>&1)
+    assert_contains "$output" "Invalid device name" "rejects name with space"
+    assert_equals "false" "$([ -f "$UVID_DIR/.uvid-device" ] && echo true || echo false)" "no file created"
+}
+
+test_set_device_rejects_uppercase() {
+    local output=$(bash "$UVID" --set-device "MyPC" 2>&1)
+    assert_contains "$output" "Invalid device name" "rejects uppercase"
+}
+
+test_entry_includes_device_when_set() {
+    bash "$UVID" --set-device work > /dev/null
+    bash "$UVID" "test entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "{work}" "entry contains device tag"
+}
+
+test_entry_uses_hostname_fallback() {
+    bash "$UVID" "test entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    # Device should default to hostname (lowercased) if not explicitly set
+    local hostname_lower=$(hostname 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    if [[ "$hostname_lower" =~ ^[a-z0-9-]+$ ]]; then
+        assert_contains "$content" "{$hostname_lower}" "hostname used as device fallback"
+    else
+        assert_not_contains "$content" "{" "no device tag if hostname invalid"
+    fi
+}
+
+test_entry_has_seconds_in_timestamp() {
+    bash "$UVID" "test entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    # Timestamp should match [DD.MM.YYYY HH:MM:SS]
+    local ts_match=$(echo "$content" | grep -c '\[[0-9]\{2\}\.[0-9]\{2\}\.[0-9]\{4\} [0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\]')
+    assert_equals "1" "$ts_match" "timestamp includes seconds"
+}
+
+test_device_from_env_var() {
+    UVID_DEVICE="from-env" bash "$UVID" "env entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "{from-env}" "device from env var"
+}
+
+test_device_file_overridden_by_env() {
+    bash "$UVID" --set-device file-dev > /dev/null
+    UVID_DEVICE="env-dev" bash "$UVID" "override entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "{env-dev}" "env var overrides file"
+}
+
+# ---- Display (device stripping) ----
+
+test_list_hides_device_by_default() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "visible text" > /dev/null
+    local output=$(bash "$UVID" --list)
+    assert_contains "$output" "visible text" "text shown in list"
+    assert_not_contains "$output" "{mypc}" "device tag hidden in list"
+}
+
+test_list_verbose_shows_device() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "visible text" > /dev/null
+    local output=$(bash "$UVID" --list --verbose)
+    assert_contains "$output" "{mypc}" "device tag shown with --verbose"
+}
+
+test_search_hides_device_by_default() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "searchable text" > /dev/null
+    local output=$(bash "$UVID" --search "searchable")
+    assert_contains "$output" "searchable text" "text shown in search"
+    assert_not_contains "$output" "{mypc}" "device tag hidden in search"
+}
+
+test_search_verbose_shows_device() {
+    bash "$UVID" --set-device mypc > /dev/null
+    bash "$UVID" "searchable text" > /dev/null
+    local output=$(bash "$UVID" --search "searchable" --verbose)
+    assert_contains "$output" "{mypc}" "device tag shown in search with --verbose"
+}
+
 # ---- Run all ----
 
 run_test test_inline_text_only
@@ -389,11 +510,12 @@ run_test test_list_with_count
 run_test test_list_no_log_file
 run_test test_search_finds_match
 run_test test_search_case_insensitive
-run_test test_search_across_years
+run_test test_search_across_months
 run_test test_edit_updates_text
 run_test test_edit_preserves_timestamp
 run_test test_edit_clears_author_with_space
 run_test test_edit_keeps_all_on_empty_input
+run_test test_edit_preserves_device_tag
 run_test test_delete_removes_entry
 run_test test_delete_cancel_with_n
 run_test test_delete_default_confirm_is_yes
@@ -402,7 +524,7 @@ run_test test_export_creates_file
 run_test test_export_contains_entries
 run_test test_export_metadata_formatting
 run_test test_export_no_entries
-run_test test_export_across_years
+run_test test_export_across_months
 run_test test_export_filter_search
 run_test test_export_filter_author
 run_test test_export_filter_author_case_insensitive
@@ -411,6 +533,20 @@ run_test test_export_filter_date_range
 run_test test_export_filter_combined
 run_test test_export_year_and_from_to_exclusive
 run_test test_export_from_without_to
+run_test test_export_includes_device
+run_test test_export_no_device_when_missing
+run_test test_set_device_creates_file
+run_test test_set_device_rejects_invalid
+run_test test_set_device_rejects_uppercase
+run_test test_entry_includes_device_when_set
+run_test test_entry_uses_hostname_fallback
+run_test test_entry_has_seconds_in_timestamp
+run_test test_device_from_env_var
+run_test test_device_file_overridden_by_env
+run_test test_list_hides_device_by_default
+run_test test_list_verbose_shows_device
+run_test test_search_hides_device_by_default
+run_test test_search_verbose_shows_device
 
 echo ""
 echo "======================================"
