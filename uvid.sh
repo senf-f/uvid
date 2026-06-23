@@ -7,6 +7,19 @@ export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 UVID_DIR="${UVID_DIR:-$HOME/.uvid}"
 mkdir -p "$UVID_DIR"
 
+get_device() {
+    local device=""
+    if [ -n "$UVID_DEVICE" ]; then
+        device="$UVID_DEVICE"
+    elif [ -f "$UVID_DIR/.uvid-device" ]; then
+        device=$(cat "$UVID_DIR/.uvid-device")
+    fi
+    if [ -n "$device" ] && [[ ! "$device" =~ ^[a-z0-9-]+$ ]]; then
+        device=""
+    fi
+    echo "$device"
+}
+
 show_help() {
     echo "uvid - log timestamped entries to a monthly log file"
     echo ""
@@ -399,7 +412,7 @@ do_export() {
     echo "Exported ${#matched[@]} entries to $export_file"
 }
 
-timestamp=$(date +'%d.%m.%Y %H:%M')
+timestamp=$(date +'%d.%m.%Y %H:%M:%S')
 
 # Handle special flags
 case $1 in
@@ -428,6 +441,15 @@ case $1 in
             exit 1
         fi
         exit 0 ;;
+    --set-device)
+        device_name="$2"
+        if [ -z "$device_name" ] || [[ ! "$device_name" =~ ^[a-z0-9-]+$ ]]; then
+            echo "Invalid device name. Use lowercase letters, numbers, and hyphens only."
+            exit 1
+        fi
+        echo "$device_name" > "$UVID_DIR/.uvid-device"
+        echo "Device set to: $device_name"
+        exit 0 ;;
 esac
 
 if [[ "$#" -eq 0 ]]; then
@@ -446,6 +468,8 @@ if [[ "$#" -eq 0 ]]; then
     entry="[$timestamp] $text_entry"
     [ -n "$author_input" ] && entry="$entry [$author_input]"
     [ -n "$source_input" ] && entry="$entry ($source_input)"
+    device=$(get_device)
+    [ -n "$device" ] && entry="$entry {$device}"
 
     log_entry "$entry"
 else
@@ -467,6 +491,8 @@ else
     entry="[$timestamp] $text_entry"
     [ -n "$author" ] && entry="$entry $author"
     [ -n "$source_text" ] && entry="$entry $source_text"
+    device=$(get_device)
+    [ -n "$device" ] && entry="$entry {$device}"
 
     log_entry "$entry"
 fi

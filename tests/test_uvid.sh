@@ -378,6 +378,59 @@ test_export_from_without_to() {
     assert_contains "$output" "must both be provided" "from without to error message"
 }
 
+# ---- Device ----
+
+test_set_device_creates_file() {
+    bash "$UVID" --set-device laptop > /dev/null
+    local content=$(cat "$UVID_DIR/.uvid-device")
+    assert_equals "laptop" "$content" "device file contains device name"
+}
+
+test_set_device_rejects_invalid() {
+    local output=$(bash "$UVID" --set-device "bad name" 2>&1)
+    assert_contains "$output" "Invalid device name" "rejects name with space"
+    assert_equals "false" "$([ -f "$UVID_DIR/.uvid-device" ] && echo true || echo false)" "no file created"
+}
+
+test_set_device_rejects_uppercase() {
+    local output=$(bash "$UVID" --set-device "MyPC" 2>&1)
+    assert_contains "$output" "Invalid device name" "rejects uppercase"
+}
+
+test_entry_includes_device_when_set() {
+    bash "$UVID" --set-device work > /dev/null
+    bash "$UVID" "test entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "{work}" "entry contains device tag"
+}
+
+test_entry_no_device_when_not_set() {
+    bash "$UVID" "test entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_not_contains "$content" "{" "no device tag without config"
+}
+
+test_entry_has_seconds_in_timestamp() {
+    bash "$UVID" "test entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    # Timestamp should match [DD.MM.YYYY HH:MM:SS]
+    local ts_match=$(echo "$content" | grep -c '\[[0-9]\{2\}\.[0-9]\{2\}\.[0-9]\{4\} [0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\]')
+    assert_equals "1" "$ts_match" "timestamp includes seconds"
+}
+
+test_device_from_env_var() {
+    UVID_DEVICE="from-env" bash "$UVID" "env entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "{from-env}" "device from env var"
+}
+
+test_device_file_overridden_by_env() {
+    bash "$UVID" --set-device file-dev > /dev/null
+    UVID_DEVICE="env-dev" bash "$UVID" "override entry" > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "{env-dev}" "env var overrides file"
+}
+
 # ---- Run all ----
 
 run_test test_inline_text_only
@@ -411,6 +464,14 @@ run_test test_export_filter_date_range
 run_test test_export_filter_combined
 run_test test_export_year_and_from_to_exclusive
 run_test test_export_from_without_to
+run_test test_set_device_creates_file
+run_test test_set_device_rejects_invalid
+run_test test_set_device_rejects_uppercase
+run_test test_entry_includes_device_when_set
+run_test test_entry_no_device_when_not_set
+run_test test_entry_has_seconds_in_timestamp
+run_test test_device_from_env_var
+run_test test_device_file_overridden_by_env
 
 echo ""
 echo "======================================"
