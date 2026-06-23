@@ -378,6 +378,25 @@ test_export_from_without_to() {
     assert_contains "$output" "must both be provided" "from without to error message"
 }
 
+# ---- Export with device ----
+
+test_export_includes_device() {
+    bash "$UVID" --set-device laptop > /dev/null
+    bash "$UVID" "exported entry" -a "Auth" -s "Src" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_contains "$content" "Device: laptop" "export shows device"
+}
+
+test_export_no_device_when_missing() {
+    echo "[15.06.2025 10:00] old entry [Auth] (Src)" > "06-2025_uvid.log"
+    bash "$UVID" --export > /dev/null
+    local export_file="uvid_export_$(date +'%Y-%m-%d').md"
+    local content=$(cat "$export_file")
+    assert_not_contains "$content" "Device:" "no device line for old entries"
+}
+
 # ---- Device ----
 
 test_set_device_creates_file() {
@@ -496,6 +515,8 @@ run_test test_export_filter_date_range
 run_test test_export_filter_combined
 run_test test_export_year_and_from_to_exclusive
 run_test test_export_from_without_to
+run_test test_export_includes_device
+run_test test_export_no_device_when_missing
 run_test test_set_device_creates_file
 run_test test_set_device_rejects_invalid
 run_test test_set_device_rejects_uppercase

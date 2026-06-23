@@ -429,6 +429,9 @@ do_export() {
             elif $has_source; then
                 echo "- Source: $p_source"
             fi
+            if [ -n "$p_device" ]; then
+                echo "- Device: $p_device"
+            fi
         done
     } > "$export_file"
 
