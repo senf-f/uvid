@@ -17,6 +17,8 @@ for %%A in (%*) do (
     ) else if "!ARG!"=="--year" (set "ARG=-Year"
     ) else if "!ARG!"=="--from" (set "ARG=-From"
     ) else if "!ARG!"=="--to" (set "ARG=-To"
+    ) else if "!ARG!"=="--set-device" (set "ARG=-SetDevice"
+    ) else if "!ARG!"=="--verbose" (set "ARG=-ShowDevice"
     )
     set ARGS=!ARGS! "!ARG!"
 )
