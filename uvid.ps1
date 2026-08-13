@@ -349,9 +349,19 @@ if ($Sync) {
 
     $remote = "$VpsUser@$VpsHost"
 
+    # Prefer rsync (skips unchanged files); fall back to scp if unavailable.
+    $haveRsync = [bool](Get-Command rsync -ErrorAction SilentlyContinue)
+    if (-not $haveRsync) {
+        Write-Host "Warning: rsync not found, falling back to scp (all files will be copied)."
+    }
+
     Write-Host "Pushing local logs to VPS..."
     ssh $remote "mkdir -p $VpsDir/incoming"
-    scp "$UvidDir/*_uvid.log" "${remote}:$VpsDir/incoming/"
+    if ($haveRsync) {
+        rsync -az "$UvidDir/*_uvid.log" "${remote}:$VpsDir/incoming/"
+    } else {
+        scp "$UvidDir/*_uvid.log" "${remote}:$VpsDir/incoming/"
+    }
 
     Write-Host "Merging on VPS..."
     ssh $remote "bash $VpsDir/uvid-merge.sh $VpsDir/incoming"
@@ -360,7 +370,11 @@ if ($Sync) {
     ssh $remote "rm -f $VpsDir/incoming/*_uvid.log"
 
     Write-Host "Pulling merged logs..."
-    scp "${remote}:$VpsDir/*_uvid.log" "$UvidDir/"
+    if ($haveRsync) {
+        rsync -az "${remote}:$VpsDir/*_uvid.log" "$UvidDir/"
+    } else {
+        scp "${remote}:$VpsDir/*_uvid.log" "$UvidDir/"
+    }
 
     Write-Host "Sync complete."
     exit 0
