@@ -95,6 +95,8 @@ uvid --sync
 ```
 Manually trigger a sync with the VPS. Pushes local logs, merges with remote, pulls merged result. Also runs automatically every 15 minutes via cron.
 
+Transfers use `rsync`, so unchanged log files (e.g. older monthly logs) are skipped instead of re-copied every sync. If `rsync` is not installed, sync falls back to `scp` (copying all files) and prints a warning.
+
 **Merge semantics:**
 - New entries from any machine are preserved.
 - Entries are keyed by timestamp; edits on one machine propagate on the next sync.
