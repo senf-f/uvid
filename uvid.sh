@@ -151,7 +151,7 @@ parse_entry() {
         rest="${rest:0:${#rest}-${#auth_suffix}}"
     fi
 
-    p_text=$(echo "$rest" | sed 's/[[:space:]]*$//')
+    p_text="${rest%"${rest##*[![:space:]]}"}"
 }
 
 strip_device_tag() {
