@@ -66,20 +66,60 @@ do_install() {
     fi
 }
 
+# ---- Log store: owns file naming, ordering, and rewrites ----
+# Log file = [stream_]MM-YYYY_uvid.log; the main Stream has no prefix. See CONTEXT.md.
+
+current_log() { echo "$UVID_DIR/$(date +'%m-%Y')_uvid.log"; }
+
+# This month's Entries from every Stream, by timestamp. Returns 1 if the month has no Log file.
+current_entries() {
+    local f found=()
+    for f in "$UVID_DIR"/{,*_}"$(date +'%m-%Y')"_uvid.log; do [ -f "$f" ] && found+=("$f"); done
+    [ ${#found[@]} -eq 0 ] && return 1
+    awk 'NF' "${found[@]}" | LC_ALL=C sort -s -t ' ' -k1.2,1.3 -k2,2
+}
+
+# Log files oldest first (year, month, stream), optionally one year only. Ignores legacy yearly files.
+all_logs() {
+    local f name
+    for f in "$UVID_DIR"/*_uvid.log; do
+        name="${f##*/}"
+        [[ "$name" =~ ^([a-z]+_)?([0-9]{2})-([0-9]{4})_uvid\.log$ ]] || continue
+        [ -n "$1" ] && [ "${BASH_REMATCH[3]}" != "$1" ] && continue
+        printf '%s%s\t%s\t%s\n' "${BASH_REMATCH[3]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]:-0}" "$f"
+    done | LC_ALL=C sort | cut -f3-
+}
+
+# Replace the first Entry equal to $1 with $2, or delete it when $2 is omitted. Returns 1 if not found.
+replace_line() {
+    local f tmp
+    while IFS= read -r f; do
+        grep -qFx -- "$1" "$f" || continue
+        tmp=$(mktemp) && cp -p "$f" "$tmp"
+        OLD="$1" NEW="$2" DEL="$#" awk '
+            !done && $0 == ENVIRON["OLD"] { done = 1; if (ENVIRON["DEL"] == 1) next; $0 = ENVIRON["NEW"] }
+            { print }' "$f" > "$tmp" && mv "$tmp" "$f"
+        return 0
+    done < <(all_logs)
+    return 1
+}
+
+# ---- Commands ----
+
 show_list() {
     local n="${1:-10}"
     local verbose="$2"
-    local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
-    if [ ! -f "$log_file" ]; then
+    local entries
+    if ! entries=$(current_entries); then
         echo "No log file found for this month."
         exit 0
     fi
-    echo "Last $n entries from $log_file:"
+    echo "Last $n entries from $(date +'%m-%Y'):"
     echo ""
     if [ "$verbose" = "true" ]; then
-        tail -n "$n" "$log_file"
+        tail -n "$n" <<< "$entries"
     else
-        tail -n "$n" "$log_file" | strip_display_tags
+        tail -n "$n" <<< "$entries" | strip_display_tags
     fi
 }
 
@@ -90,22 +130,22 @@ do_search() {
         echo "Usage: uvid --search \"term\""
         exit 1
     fi
-    local files=("$UVID_DIR"/*_uvid.log)
-    if [ ! -f "${files[0]}" ]; then
+    local logs
+    mapfile -t logs < <(all_logs)
+    if [ ${#logs[@]} -eq 0 ]; then
         echo "No log files found."
         exit 0
     fi
     if [ "$verbose" = "true" ]; then
-        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log
+        grep -Hi --color=always -- "$term" "${logs[@]}"
     else
-        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log | strip_display_tags
+        grep -Hi --color=always -- "$term" "${logs[@]}" | strip_display_tags
     fi
 }
 
 log_entry() {
     local entry="$1"
-    local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
-    touch "$log_file"
+    local log_file=$(current_log)
     echo "$entry" >> "$log_file"
     echo ""
     echo "Logged: $entry"
@@ -183,36 +223,26 @@ pick_entry() {
     read -p "> " mode
     [ -z "$mode" ] && mode="b"
 
-    local entries=()
-    local files=()
+    local entries=() recent logs
 
     if [[ "$mode" == "s" ]]; then
         read -p "Search term: " term
-        local log_files=("$UVID_DIR"/*_uvid.log)
-        if [ ! -f "${log_files[0]}" ]; then
+        mapfile -t logs < <(all_logs)
+        if [ ${#logs[@]} -eq 0 ]; then
             echo "No log files found."
             exit 0
         fi
-        while IFS= read -r match; do
-            local file="${match%%:*}"
-            local line="${match#*:}"
-            entries+=("$line")
-            files+=("$file")
-        done < <(grep -iH "$term" "$UVID_DIR"/*_uvid.log)
+        mapfile -t entries < <(grep -ih -- "$term" "${logs[@]}")
         if [ ${#entries[@]} -eq 0 ]; then
             echo "No matches found."
             exit 0
         fi
     else
-        local log_file="$UVID_DIR/$(date +'%m-%Y')_uvid.log"
-        if [ ! -f "$log_file" ]; then
+        if ! recent=$(current_entries); then
             echo "No log file found for this month."
             exit 0
         fi
-        while IFS= read -r line; do
-            entries+=("$line")
-            files+=("$log_file")
-        done < <(tail -n 10 "$log_file")
+        [ -n "$recent" ] && mapfile -t entries < <(tail -n 10 <<< "$recent")
         if [ ${#entries[@]} -eq 0 ]; then
             echo "No entries found."
             exit 0
@@ -232,7 +262,6 @@ pick_entry() {
     fi
 
     picked_line="${entries[$((selection - 1))]}"
-    picked_file="${files[$((selection - 1))]}"
 }
 
 do_edit() {
@@ -254,18 +283,7 @@ do_edit() {
     local new_entry=$(format_entry "$p_timestamp" "${new_text:-$p_text}" \
         "${new_author:-$p_author}" "${new_source:-$p_source}" "$p_device")
 
-    # Replace in file using temp file
-    local tmpfile=$(mktemp)
-    local replaced=false
-    while IFS= read -r line; do
-        if [ "$line" = "$picked_line" ] && [ "$replaced" = false ]; then
-            echo "$new_entry"
-            replaced=true
-        else
-            echo "$line"
-        fi
-    done < "$picked_file" > "$tmpfile"
-    mv "$tmpfile" "$picked_file"
+    replace_line "$picked_line" "$new_entry"
 
     echo ""
     echo "Updated: $new_entry"
@@ -284,16 +302,7 @@ do_delete() {
         exit 0
     fi
 
-    local tmpfile=$(mktemp)
-    local deleted=false
-    while IFS= read -r line; do
-        if [ "$line" = "$picked_line" ] && [ "$deleted" = false ]; then
-            deleted=true
-        else
-            echo "$line"
-        fi
-    done < "$picked_file" > "$tmpfile"
-    mv "$tmpfile" "$picked_file"
+    replace_line "$picked_line"
 
     echo "Deleted."
 }
@@ -327,16 +336,8 @@ do_export() {
     fi
 
     # Collect log files
-    local log_files=()
-    if [ -n "$filter_year" ]; then
-        for f in $(ls "$UVID_DIR"/*-${filter_year}_uvid.log 2>/dev/null | sort); do
-            log_files+=("$f")
-        done
-    else
-        for f in $(ls "$UVID_DIR"/*_uvid.log 2>/dev/null | sort); do
-            log_files+=("$f")
-        done
-    fi
+    local log_files
+    mapfile -t log_files < <(all_logs "$filter_year")
 
     if [ ${#log_files[@]} -eq 0 ]; then
         echo "No entries found matching the given filters."
