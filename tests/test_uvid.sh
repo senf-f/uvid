@@ -193,7 +193,14 @@ test_edit_clears_author_with_space() {
     printf "\n1\n\n \n\n" | bash "$UVID" --edit > /dev/null
     local content=$(cat "$LOG_FILE")
     assert_not_contains "$content" "[to remove]" "author cleared"
-    assert_contains "$content" "(keep me)" "source preserved"
+    assert_contains "$content" "text [.] (keep me)" "cleared author becomes placeholder"
+}
+
+test_edit_text_with_parens_keeps_source() {
+    bash "$UVID" "a" -s "src" > /dev/null
+    printf "\n1\nb (c)\n\n\n" | bash "$UVID" --edit > /dev/null
+    local content=$(cat "$LOG_FILE")
+    assert_contains "$content" "b (c) [.] (src)" "parens in edited text stay in text"
 }
 
 test_edit_keeps_all_on_empty_input() {
@@ -499,6 +506,84 @@ test_search_verbose_shows_device() {
     assert_contains "$output" "{mypc}" "device tag shown in search with --verbose"
 }
 
+# ---- Entry codec ----
+
+test_codec_matches_fixture() {
+    source "$UVID"
+    local kind line ts text author source device
+    while IFS='|' read -r kind line ts text author source device; do
+        [[ -z "$kind" || "$kind" == \#* ]] && continue
+        parse_entry "$line"
+        assert_equals "$ts|$text|$author|$source|$device" \
+            "$p_timestamp|$p_text|$p_author|$p_source|$p_device" "parse: $line"
+        if [ "$kind" = "canonical" ]; then
+            assert_equals "$line" "$(format_entry "$ts" "$text" "$author" "$source" "$device")" "format: $line"
+        fi
+    done < "$SCRIPT_DIR/fixtures/entries.txt"
+}
+
+test_inline_writes_placeholders() {
+    UVID_DEVICE=x bash "$UVID" "bare" > /dev/null
+    assert_contains "$(cat "$LOG_FILE")" "bare [.] (-) {x}" "inline entry carries both placeholders"
+}
+
+test_inline_text_with_parens_not_read_as_source() {
+    bash "$UVID" "idea (see chapter 3)" > /dev/null
+    bash "$UVID" --export > /dev/null
+    local content=$(cat "uvid_export_$(date +'%Y-%m-%d').md")
+    assert_contains "$content" "idea (see chapter 3)" "parens kept in text"
+    assert_not_contains "$content" "Source:" "parens not exported as source"
+}
+
+test_inline_collapses_newlines() {
+    bash "$UVID" $'line one\nline   two' > /dev/null
+    assert_equals "1" "$(wc -l < "$LOG_FILE" | tr -d ' ')" "entry stays on one line"
+    assert_contains "$(cat "$LOG_FILE")" "line one line two [.]" "whitespace collapsed"
+}
+
+test_closing_brackets_stripped_from_fields() {
+    bash "$UVID" "t" -a "a]b" -s "c)d" > /dev/null
+    assert_contains "$(cat "$LOG_FILE")" "t [ab] (cd)" "closing brackets removed from author/source"
+}
+
+test_inline_rejects_unknown_flag() {
+    local output=$(bash "$UVID" --lsit)
+    assert_contains "$output" "Unknown flag: --lsit" "unknown flag rejected"
+    assert_equals "false" "$([ -f "$LOG_FILE" ] && echo true || echo false)" "nothing logged"
+}
+
+test_list_hides_placeholders() {
+    bash "$UVID" "plain" > /dev/null
+    bash "$UVID" "sourced" -s "Blog" > /dev/null
+    local output=$(bash "$UVID" --list)
+    assert_not_contains "$output" "[.]" "author placeholder hidden"
+    assert_not_contains "$output" "(-)" "source placeholder hidden"
+    assert_contains "$output" "sourced (Blog)" "real source still shown"
+    assert_contains "$(bash "$UVID" --list --verbose)" "plain [.] (-)" "--verbose shows placeholders"
+}
+
+test_search_hides_placeholders() {
+    bash "$UVID" "findme" > /dev/null
+    assert_not_contains "$(bash "$UVID" --search findme)" "[.]" "placeholder hidden in search"
+}
+
+# ---- PowerShell parity (uvid.cmd runs Windows PowerShell 5.1) ----
+
+PS=$(command -v powershell.exe || command -v powershell || true)
+run_ps() { "$PS" -NoProfile -ExecutionPolicy Bypass -File "$SCRIPT_DIR/../uvid.ps1" "$@"; }
+
+test_ps_inline_matches_codec() {
+    UVID_DEVICE=x run_ps "idea (see chapter 3)" > /dev/null
+    assert_contains "$(cat "$LOG_FILE")" "] idea (see chapter 3) [.] (-) {x}" "ps inline uses canonical format"
+}
+
+test_ps_list_hides_placeholders() {
+    UVID_DEVICE=x run_ps "psplain" > /dev/null
+    local output=$(run_ps -List 5)
+    assert_contains "$output" "psplain" "entry listed"
+    assert_not_contains "$output" "[.]" "ps hides author placeholder"
+}
+
 # ---- Run all ----
 
 run_test test_inline_text_only
@@ -547,6 +632,21 @@ run_test test_list_hides_device_by_default
 run_test test_list_verbose_shows_device
 run_test test_search_hides_device_by_default
 run_test test_search_verbose_shows_device
+run_test test_edit_text_with_parens_keeps_source
+run_test test_codec_matches_fixture
+run_test test_inline_writes_placeholders
+run_test test_inline_text_with_parens_not_read_as_source
+run_test test_inline_collapses_newlines
+run_test test_closing_brackets_stripped_from_fields
+run_test test_inline_rejects_unknown_flag
+run_test test_list_hides_placeholders
+run_test test_search_hides_placeholders
+if [ -n "$PS" ]; then
+    run_test test_ps_inline_matches_codec
+    run_test test_ps_list_hides_placeholders
+else
+    echo ""; echo "SKIP: PowerShell parity tests (no powershell on PATH)"
+fi
 
 echo ""
 echo "======================================"

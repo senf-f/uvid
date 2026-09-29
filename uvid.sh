@@ -79,7 +79,7 @@ show_list() {
     if [ "$verbose" = "true" ]; then
         tail -n "$n" "$log_file"
     else
-        tail -n "$n" "$log_file" | strip_device_tag
+        tail -n "$n" "$log_file" | strip_display_tags
     fi
 }
 
@@ -98,7 +98,7 @@ do_search() {
     if [ "$verbose" = "true" ]; then
         grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log
     else
-        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log | strip_device_tag
+        grep -Hi --color=always "$term" "$UVID_DIR"/*_uvid.log | strip_display_tags
     fi
 }
 
@@ -112,6 +112,24 @@ log_entry() {
     echo "File:   $log_file"
 }
 
+collapse_ws() {
+    local words
+    read -rd '' -a words <<< "$1"
+    local IFS=' '
+    echo "${words[*]}"
+}
+
+# Always writes both fields (placeholders when empty) so a trailing (...) in text can't be mistaken for the source.
+format_entry() {
+    local ts="$1" text author source device="$5"
+    text=$(collapse_ws "$2")
+    author=$(collapse_ws "${3//]/}")
+    source=$(collapse_ws "${4//)/}")
+    local entry="[$ts] $text [${author:-.}] (${source:--})"
+    [ -n "$device" ] && entry="$entry {$device}"
+    echo "$entry"
+}
+
 parse_entry() {
     local line="$1"
     p_timestamp=""
@@ -120,13 +138,13 @@ parse_entry() {
     p_device=""
     local ts_re='^\[([0-9.]+[[:space:]][0-9:]+)\]'
     if [[ "$line" =~ $ts_re ]]; then
-        p_timestamp="[${BASH_REMATCH[1]}]"
+        p_timestamp="${BASH_REMATCH[1]}"
     fi
 
     # Strip timestamp using substring arithmetic (avoids glob [...] interpretation)
     local rest="$line"
     if [ -n "$p_timestamp" ]; then
-        rest="${rest:${#p_timestamp}+1}"
+        rest="${rest:${#p_timestamp}+3}"
     fi
 
     # Extract device tag (trailing {name})
@@ -152,10 +170,12 @@ parse_entry() {
     fi
 
     p_text="${rest%"${rest##*[![:space:]]}"}"
+    [ "$p_author" = "." ] && p_author=""
+    [ "$p_source" = "-" ] && p_source=""
 }
 
-strip_device_tag() {
-    sed 's/ {[a-z0-9-]*}$//'
+strip_display_tags() {
+    sed -E 's/ \{[a-z0-9-]+\}$//; s/ \(-\)$//; s/ \[\.\]( \([^)]*\))?$/\1/'
 }
 
 pick_entry() {
@@ -230,27 +250,9 @@ do_edit() {
     IFS= read -rp "Author [$display_author]: " new_author
     IFS= read -rp "Source [$display_source]: " new_source
 
-    # Keep current values if Enter pressed
-    [ -z "$new_text" ] && new_text="$p_text"
-
-    # For author/source: Enter=keep, space-only=clear
-    if [ -z "$new_author" ]; then
-        new_author="$p_author"
-    elif [[ "$new_author" =~ ^[[:space:]]+$ ]]; then
-        new_author=""
-    fi
-
-    if [ -z "$new_source" ]; then
-        new_source="$p_source"
-    elif [[ "$new_source" =~ ^[[:space:]]+$ ]]; then
-        new_source=""
-    fi
-
-    # Reconstruct entry
-    local new_entry="$p_timestamp $new_text"
-    [ -n "$new_author" ] && new_entry="$new_entry [$new_author]"
-    [ -n "$new_source" ] && new_entry="$new_entry ($new_source)"
-    [ -n "$p_device" ] && new_entry="$new_entry {$p_device}"
+    # Enter=keep; space-only clears (format_entry collapses it to empty)
+    local new_entry=$(format_entry "$p_timestamp" "${new_text:-$p_text}" \
+        "${new_author:-$p_author}" "${new_source:-$p_source}" "$p_device")
 
     # Replace in file using temp file
     local tmpfile=$(mktemp)
@@ -375,7 +377,7 @@ do_export() {
 
             # Date range filter
             if [ -n "$from_int" ]; then
-                local ts_date="${p_timestamp:1:10}"
+                local ts_date="${p_timestamp:0:10}"
                 local entry_int=$(date_to_int "$ts_date")
                 [ "$entry_int" -lt "$from_int" ] && continue
                 [ "$entry_int" -gt "$to_int" ] && continue
@@ -417,21 +419,13 @@ do_export() {
         for line in "${matched[@]}"; do
             parse_entry "$line"
             echo ""
-            echo "**${p_timestamp}** $p_text"
+            echo "**[${p_timestamp}]** $p_text"
 
-            local has_author=false has_source=false
-            if [ -n "$p_author" ] && [ "$p_author" != "." ]; then
-                has_author=true
-            fi
-            if [ -n "$p_source" ] && [ "$p_source" != "-" ]; then
-                has_source=true
-            fi
-
-            if $has_author && $has_source; then
+            if [ -n "$p_author" ] && [ -n "$p_source" ]; then
                 echo "- Author: $p_author | Source: $p_source"
-            elif $has_author; then
+            elif [ -n "$p_author" ]; then
                 echo "- Author: $p_author"
-            elif $has_source; then
+            elif [ -n "$p_source" ]; then
                 echo "- Source: $p_source"
             fi
             if [ -n "$p_device" ]; then
@@ -442,6 +436,9 @@ do_export() {
 
     echo "Exported ${#matched[@]} entries to $export_file"
 }
+
+# Sourced (e.g. by tests): expose functions only
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 timestamp=$(date +'%d.%m.%Y %H:%M:%S')
 
@@ -490,31 +487,19 @@ case $1 in
 esac
 
 if [[ "$#" -eq 0 ]]; then
-    # Interactive mode
     read -p "Text: " text_entry
     if [ -z "$text_entry" ]; then
         echo "Text entry is required."
         exit 1
     fi
-
-    read -p "Source [-]: " source_input
-    [ -z "$source_input" ] && source_input="-"
-    read -p "Author [.]: " author_input
-    [ -z "$author_input" ] && author_input="."
-
-    entry="[$timestamp] $text_entry"
-    [ -n "$author_input" ] && entry="$entry [$author_input]"
-    [ -n "$source_input" ] && entry="$entry ($source_input)"
-    device=$(get_device)
-    [ -n "$device" ] && entry="$entry {$device}"
-
-    log_entry "$entry"
+    read -p "Source [-]: " source_text
+    read -p "Author [.]: " author
 else
-    # Inline mode
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            -s) shift; source_text="($1)" ;;
-            -a) shift; author="[$1]" ;;
+            -s) shift; source_text="$1" ;;
+            -a) shift; author="$1" ;;
+            -*) echo "Unknown flag: $1"; echo "Run 'uvid --help' for usage."; exit 1 ;;
             *)  text_entry="$1" ;;
         esac
         shift
@@ -524,12 +509,6 @@ else
         echo "Usage: uvid \"some text entry\" -s \"source\" -a \"author\""
         exit 1
     fi
-
-    entry="[$timestamp] $text_entry"
-    [ -n "$author" ] && entry="$entry $author"
-    [ -n "$source_text" ] && entry="$entry $source_text"
-    device=$(get_device)
-    [ -n "$device" ] && entry="$entry {$device}"
-
-    log_entry "$entry"
 fi
+
+log_entry "$(format_entry "$timestamp" "$text_entry" "$author" "$source_text" "$(get_device)")"
