@@ -1,5 +1,5 @@
 # uvid
-uvid is a simple script for capturing timestamped ideas with optional source and author metadata, saved to a yearly log file. Available as a Bash script (`uvid.sh`) and a PowerShell script (`uvid.ps1`).
+uvid is a simple script for capturing timestamped ideas with optional source and author metadata, saved to a yearly log file. Implemented in Bash (`uvid.sh`); on Windows, `uvid.ps1` and `uvid.cmd` forward to it through Git Bash, so Git for Windows is required.
 
 ## Install
 
@@ -11,7 +11,7 @@ chmod +x uvid.sh
 
 **PowerShell:**
 ```powershell
-.\uvid.ps1 -Install
+.\uvid.ps1 --install
 ```
 
 This adds `uvid` as a command available anywhere in your shell.
@@ -41,16 +41,10 @@ Source and author are optional — press Enter to leave them blank.
 uvid --list        # last 10 entries
 uvid --list 5      # last 5 entries
 ```
-```powershell
-uvid -List 10
-```
 
 ### Search
 ```bash
 uvid --search "keyword"
-```
-```powershell
-uvid -Search "keyword"
 ```
 Searches across all log files.
 
@@ -58,17 +52,11 @@ Searches across all log files.
 ```bash
 uvid --edit
 ```
-```powershell
-uvid -Edit
-```
 Browse recent entries or search, then edit the selected entry field by field.
 
 ### Delete an entry
 ```bash
 uvid --delete
-```
-```powershell
-uvid -Delete
 ```
 Browse recent entries or search, then confirm deletion.
 
@@ -79,13 +67,6 @@ uvid --export --search "keyword"                    # filter by text
 uvid --export --author "Author Name"                # filter by author
 uvid --export --year 2025                           # filter by year
 uvid --export --from 01.03.2025 --to 15.06.2025    # filter by date range
-```
-```powershell
-uvid -Export
-uvid -Export -Search "keyword"
-uvid -Export -Author "Author Name"
-uvid -Export -Year 2025
-uvid -Export -From "01.03.2025" -To "15.06.2025"
 ```
 Exports matching entries to `uvid_export_YYYY-MM-DD.md` in the current directory. Filters can be combined.
 
@@ -112,27 +93,24 @@ Transfers use `rsync`, so unchanged log files (e.g. older monthly logs) are skip
 ```bash
 uvid --help
 ```
-```powershell
-uvid -Help
-```
 
 ## Options
 | Flag | Description |
 |------|-------------|
 | `-s` | Source of the entry (optional) |
 | `-a` | Author of the entry (optional) |
-| `--list [n]` / `-List n` | Show last n entries from this year's log |
-| `--search` / `-Search` | Search all log files for a term |
-| `--edit` / `-Edit` | Edit an existing entry interactively |
-| `--delete` / `-Delete` | Delete an existing entry with confirmation |
-| `--export` / `-Export` | Export entries to Markdown file |
-| `--author` / `-Author` | Filter export by author |
-| `--year` / `-Year` | Filter export by year |
-| `--from` / `-From` | Start of date range filter |
-| `--to` / `-To` | End of date range filter |
+| `--list [n]` | Show last n entries from this year's log |
+| `--search` | Search all log files for a term |
+| `--edit` | Edit an existing entry interactively |
+| `--delete` | Delete an existing entry with confirmation |
+| `--export` | Export entries to Markdown file |
+| `--author` | Filter export by author |
+| `--year` | Filter export by year |
+| `--from` | Start of date range filter |
+| `--to` | End of date range filter |
 | `--sync` | Sync logs with VPS |
-| `--install` / `-Install` | Install uvid to your shell |
-| `--help` / `-Help` | Show help |
+| `--install` | Install uvid to your shell |
+| `--help` | Show help |
 
 ## Log file
 Entries are saved to `~/.uvid/YEAR_uvid.log`. A new file is created each year. The directory is auto-created on first run.

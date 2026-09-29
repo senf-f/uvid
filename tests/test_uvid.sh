@@ -567,21 +567,24 @@ test_search_hides_placeholders() {
     assert_not_contains "$(bash "$UVID" --search findme)" "[.]" "placeholder hidden in search"
 }
 
-# ---- PowerShell parity (uvid.cmd runs Windows PowerShell 5.1) ----
+# ---- PowerShell adapter (uvid.cmd runs Windows PowerShell 5.1) ----
 
 PS=$(command -v powershell.exe || command -v powershell || true)
 run_ps() { "$PS" -NoProfile -ExecutionPolicy Bypass -File "$SCRIPT_DIR/../uvid.ps1" "$@"; }
 
-test_ps_inline_matches_codec() {
-    UVID_DEVICE=x run_ps "idea (see chapter 3)" > /dev/null
-    assert_contains "$(cat "$LOG_FILE")" "] idea (see chapter 3) [.] (-) {x}" "ps inline uses canonical format"
+test_ps_args_survive_hop() {
+    UVID_DEVICE=x run_ps "it's \"quoted\" čćž" -s "a b" > /dev/null
+    assert_contains "$(cat "$LOG_FILE")" "] it's \"quoted\" čćž [.] (a b) {x}" "quotes and unicode reach bash intact"
 }
 
-test_ps_list_hides_placeholders() {
-    UVID_DEVICE=x run_ps "psplain" > /dev/null
-    local output=$(run_ps -List 5)
-    assert_contains "$output" "psplain" "entry listed"
-    assert_not_contains "$output" "[.]" "ps hides author placeholder"
+test_ps_list_matches_bash() {
+    bash "$UVID" "psplain" > /dev/null
+    # Header differs: MSYS rewrites UVID_DIR to a Windows path on the way through PowerShell.
+    assert_equals "$(bash "$UVID" --list 5 | tail -n +2)" "$(run_ps --list 5 | tail -n +2)" "ps --list output matches bash"
+}
+
+test_ps_unknown_flag_rejected() {
+    assert_contains "$(run_ps --bogus)" "Unknown flag: --bogus" "ps reaches bash flag check"
 }
 
 # ---- Run all ----
@@ -642,8 +645,9 @@ run_test test_inline_rejects_unknown_flag
 run_test test_list_hides_placeholders
 run_test test_search_hides_placeholders
 if [ -n "$PS" ]; then
-    run_test test_ps_inline_matches_codec
-    run_test test_ps_list_hides_placeholders
+    run_test test_ps_args_survive_hop
+    run_test test_ps_list_matches_bash
+    run_test test_ps_unknown_flag_rejected
 else
     echo ""; echo "SKIP: PowerShell parity tests (no powershell on PATH)"
 fi

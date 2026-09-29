@@ -440,6 +440,13 @@ do_export() {
 # Sourced (e.g. by tests): expose functions only
 [[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
+# Set by uvid.ps1: each arg terminated by \x1f (Git Bash would strip quotes from argv).
+if [ -n "${UVID_ARGS+x}" ]; then
+    mapfile -d $'\x1f' -t _args < <(printf '%s' "$UVID_ARGS")
+    unset UVID_ARGS
+    set -- "${_args[@]}"
+fi
+
 timestamp=$(date +'%d.%m.%Y %H:%M:%S')
 
 # Handle special flags
@@ -468,13 +475,7 @@ case $1 in
         do_export "$@"; exit 0 ;;
     --sync)
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        if [ -x "$SCRIPT_DIR/uvid-sync.sh" ]; then
-            "$SCRIPT_DIR/uvid-sync.sh"
-        else
-            echo "uvid-sync.sh not found or not executable."
-            exit 1
-        fi
-        exit 0 ;;
+        bash "$SCRIPT_DIR/uvid-sync.sh"; exit $? ;;
     --set-device)
         device_name="$2"
         if [ -z "$device_name" ] || [[ ! "$device_name" =~ ^[a-z0-9-]+$ ]]; then
