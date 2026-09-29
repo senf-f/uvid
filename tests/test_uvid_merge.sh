@@ -177,6 +177,39 @@ test_mixed_format_old_and_new() {
     assert_file_equals "$CANON_DIR/04-2026_uvid.log" "$expected" "mixed old/new format entries merge correctly"
 }
 
+test_same_second_same_device_both_survive() {
+    printf '[01.04.2026 10:00:05] a [.] (-) {x}\n' > "$CANON_DIR/04-2026_uvid.log"
+    printf '[01.04.2026 10:00:05] a [.] (-) {x}\n[01.04.2026 10:00:05] b [.] (-) {x}\n' > "$INC_DIR/04-2026_uvid.log"
+    run_merge
+    local expected='[01.04.2026 10:00:05] a [.] (-) {x}
+[01.04.2026 10:00:05] b [.] (-) {x}'
+    assert_file_equals "$CANON_DIR/04-2026_uvid.log" "$expected" "two entries in the same second on one device both survive"
+}
+
+test_same_second_second_entry_edit_propagates() {
+    printf '[01.04.2026 10:00:05] a [.] (-) {x}\n[01.04.2026 10:00:05] b [.] (-) {x}\n' > "$CANON_DIR/04-2026_uvid.log"
+    printf '[01.04.2026 10:00:05] a [.] (-) {x}\n[01.04.2026 10:00:05] b edited [.] (-) {x}\n' > "$INC_DIR/04-2026_uvid.log"
+    run_merge
+    local expected='[01.04.2026 10:00:05] a [.] (-) {x}
+[01.04.2026 10:00:05] b edited [.] (-) {x}'
+    assert_file_equals "$CANON_DIR/04-2026_uvid.log" "$expected" "edit of second same-second entry replaces only it"
+}
+
+# Merge must see the same device the codec parses, or edits stop propagating.
+test_fixture_edits_propagate() {
+    local kind line ts text author source device
+    while IFS='|' read -r kind line ts text author source device; do
+        [[ "$kind" != "canonical" || -z "$device" ]] && continue
+        printf '[%s] old [.] (-) {%s}\n' "$ts" "$device" > "$CANON_DIR/04-2026_uvid.log"
+        printf '%s\n' "$line" > "$INC_DIR/04-2026_uvid.log"
+        run_merge
+        assert_file_equals "$CANON_DIR/04-2026_uvid.log" "$line" "edit propagates: $line"
+    done < "$SCRIPT_DIR/fixtures/entries.txt"
+}
+
+run_test test_same_second_same_device_both_survive
+run_test test_same_second_second_entry_edit_propagates
+run_test test_fixture_edits_propagate
 run_test test_first_sync_copies_incoming
 run_test test_new_entries_added_from_incoming
 run_test test_exact_duplicates_dedup

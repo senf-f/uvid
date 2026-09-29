@@ -2,8 +2,8 @@
 # Merges incoming uvid log files with canonical copies.
 #
 # Strategy:
-#   - Entries with {device} tags: dedup by timestamp + device.
-#     Same timestamp + same device = incoming wins (edit propagation).
+#   - Entries with {device} tags: dedup by Entry identity (timestamp + device + position,
+#     see CONTEXT.md). Same identity = incoming wins (edit propagation).
 #     Same timestamp + different device = both kept.
 #   - Entries without {device}: dedup by full line content.
 #   - Original insertion order is preserved (no sorting).
@@ -50,28 +50,29 @@ for incoming_file in "$INCOMING_DIR"/*_uvid.log; do
             }
             return ""
         }
-        function dedup_key(line) {
-            t = ts(line)
+        # Entry identity: timestamp + device + position among same-ts/device lines in the file.
+        # ponytail: deleting the earlier of two same-second entries shifts positions and can
+        # duplicate the later one on next sync; per-entry IDs if that ever bites.
+        function identity(line, side,    d, td) {
             d = device(line)
-            if (d != "") {
-                return t SUBSEP d
-            }
-            return ""
+            if (d == "") return ""
+            td = ts(line) SUBSEP d
+            return td SUBSEP (++pos[side, td])
         }
         FNR == NR {
             # Pass 1: incoming
             inc_order[++inc_n] = $0
-            k = dedup_key($0)
+            k = identity($0, "inc")
+            inc_key[inc_n] = k
             if (k != "") {
                 inc_by_key[k] = $0
                 inc_has_key[k] = 1
             }
-            inc_full[$0] = 1
             next
         }
         # Pass 2: canonical
         {
-            k = dedup_key($0)
+            k = identity($0, "can")
             if (k != "" && (k in inc_has_key)) {
                 # Same timestamp+device: incoming wins (edit propagation)
                 if (!(k in printed)) {
@@ -95,7 +96,7 @@ for incoming_file in "$INCOMING_DIR"/*_uvid.log; do
         END {
             for (i = 1; i <= inc_n; i++) {
                 line = inc_order[i]
-                k = dedup_key(line)
+                k = inc_key[i]
                 if (k != "") {
                     if (!(k in printed)) {
                         print line

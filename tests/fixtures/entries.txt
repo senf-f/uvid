@@ -1,0 +1,15 @@
+# Golden Entry lines: kind|line|timestamp|text|author|source|device
+# Parsed author/source are empty when the line holds a placeholder ([.] / (-)).
+# canonical = format_entry(timestamp, text, author, source, device) must produce `line`.
+# legacy    = older lines that must only parse.
+# A copy lives in uvid-telegram-bot/tests/fixtures/entries.txt; keep them in step.
+canonical|[29.09.2026 09:43:31] plain idea [.] (-) {laptop}|29.09.2026 09:43:31|plain idea|||laptop
+canonical|[29.09.2026 09:43:31] quoted text [John Doe] (Book Title) {laptop}|29.09.2026 09:43:31|quoted text|John Doe|Book Title|laptop
+canonical|[29.09.2026 09:43:31] idea (see chapter 3) [.] (-) {laptop}|29.09.2026 09:43:31|idea (see chapter 3)|||laptop
+canonical|[29.09.2026 09:43:31] cite [1] here [Jane] (-) {laptop}|29.09.2026 09:43:31|cite [1] here|Jane||laptop
+canonical|[29.09.2026 09:43:31] note {draft} [.] (Blog) {laptop}|29.09.2026 09:43:31|note {draft}||Blog|laptop
+canonical|[29.09.2026 09:43:31] voice memo [.] (telegram-voice) {vps}|29.09.2026 09:43:31|voice memo||telegram-voice|vps
+canonical|[29.09.2026 09:43:31] no device [.] (-)|29.09.2026 09:43:31|no device|||
+legacy|[15.06.2025 10:00] old entry|15.06.2025 10:00|old entry|||
+legacy|[15.06.2025 10:00] old entry [OldAuth] (OldSrc)|15.06.2025 10:00|old entry|OldAuth|OldSrc|
+legacy|[15.06.2025 10:00] author only [Jane]|15.06.2025 10:00|author only|Jane||

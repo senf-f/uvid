@@ -34,13 +34,30 @@ function Get-UvidDevice {
         $name = (Get-Content $deviceFile -Encoding UTF8).Trim()
         if ($name -match '^[a-z0-9-]+$') { return $name }
     }
-    $hostName = ($env:COMPUTERNAME ?? (hostname)).ToLower()
+    $hostName = $(if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { hostname }).ToLower()
     if ($hostName -match '^[a-z0-9-]+$') { return $hostName }
     return ""
 }
 
+function Collapse-Ws([string]$Value) { ($Value -replace '\s+', ' ').Trim() }
+
+# Always writes both fields (placeholders when empty) so a trailing (...) in text can't be mistaken for the source.
+function Format-Entry([string]$Timestamp, [string]$Text, [string]$Author, [string]$Source, [string]$Device) {
+    $Author = Collapse-Ws ($Author -replace '\]', '')
+    $Source = Collapse-Ws ($Source -replace '\)', '')
+    if (-not $Author) { $Author = "." }
+    if (-not $Source) { $Source = "-" }
+    $entry = "[$Timestamp] $(Collapse-Ws $Text) [$Author] ($Source)"
+    if ($Device) { $entry += " {$Device}" }
+    return $entry
+}
+
+function Strip-DisplayTags([string]$Line) {
+    $Line -replace ' \{[a-z0-9-]+\}$', '' -replace ' \(-\)$', '' -replace ' \[\.\]( \([^)]*\))?$', '$1'
+}
+
 if ($Help) {
-    Write-Host "uvid - log timestamped entries to a yearly log file"
+    Write-Host "uvid - log timestamped entries to a monthly log file"
     Write-Host ""
     Write-Host "Usage:"
     Write-Host "  uvid `"text entry`" [-s `"source`"] [-a `"author`"]"
@@ -110,7 +127,7 @@ if ($PSBoundParameters.ContainsKey('List')) {
     if ($ShowDevice) {
         $lines
     } else {
-        $lines | ForEach-Object { $_ -replace ' \{[a-z0-9-]+\}$', '' }
+        $lines | ForEach-Object { Strip-DisplayTags $_ }
     }
     exit 0
 }
@@ -130,7 +147,7 @@ if ($PSBoundParameters.ContainsKey('Search')) {
         $results
     } else {
         $results | ForEach-Object {
-            $_.Line = $_.Line -replace ' \{[a-z0-9-]+\}$', ''
+            $_.Line = Strip-DisplayTags $_.Line
             $_
         }
     }
@@ -152,8 +169,8 @@ function Parse-Entry {
     $result = @{ Timestamp = ""; Text = ""; Author = ""; Source = ""; Device = "" }
 
     # Extract timestamp
-    if ($Line -match '^\[[\d.]+\s[\d:]+\]') {
-        $result.Timestamp = $Matches[0]
+    if ($Line -match '^\[([\d.]+\s[\d:]+)\]') {
+        $result.Timestamp = $Matches[1]
     }
 
     $rest = ($Line -replace '^\[[\d.]+\s[\d:]+\]\s*', '')
@@ -177,6 +194,8 @@ function Parse-Entry {
     }
 
     $result.Text = $rest.TrimEnd()
+    if ($result.Author -eq ".") { $result.Author = "" }
+    if ($result.Source -eq "-") { $result.Source = "" }
     return $result
 }
 
@@ -255,27 +274,11 @@ if ($Edit) {
     $newAuthor = Read-Host "Author [$displayAuthor]"
     $newSource = Read-Host "Source [$displaySource]"
 
-    # Keep current values if Enter pressed
+    # Enter=keep; whitespace-only clears (Format-Entry collapses it to empty)
     if (-not $newText) { $newText = $parsed.Text }
-
-    # For author/source: Enter=keep, whitespace-only=clear
-    if ($newAuthor -eq "") {
-        $newAuthor = $parsed.Author
-    } elseif ($newAuthor.Trim() -eq "") {
-        $newAuthor = ""
-    }
-
-    if ($newSource -eq "") {
-        $newSource = $parsed.Source
-    } elseif ($newSource.Trim() -eq "") {
-        $newSource = ""
-    }
-
-    # Reconstruct entry (preserve device tag)
-    $newEntry = "$($parsed.Timestamp) $newText"
-    if ($newAuthor) { $newEntry += " [$newAuthor]" }
-    if ($newSource) { $newEntry += " ($newSource)" }
-    if ($parsed.Device) { $newEntry += " {$($parsed.Device)}" }
+    if ($newAuthor -eq "") { $newAuthor = $parsed.Author }
+    if ($newSource -eq "") { $newSource = $parsed.Source }
+    $newEntry = Format-Entry $parsed.Timestamp $newText $newAuthor $newSource $parsed.Device
 
     # Replace in file (only first match)
     $content = Get-Content $picked.File -Encoding UTF8
@@ -431,8 +434,7 @@ if ($Export) {
 
             # Date range filter
             if ($fromDate) {
-                $tsDate = $parsed.Timestamp -replace '[\[\]]', ''
-                $entryDateStr = ($tsDate -split ' ')[0]
+                $entryDateStr = ($parsed.Timestamp -split ' ')[0]
                 $entryDate = [datetime]::ParseExact($entryDateStr, "dd.MM.yyyy", $null)
                 if ($entryDate -lt $fromDate -or $entryDate -gt $toDate) { continue }
             }
@@ -473,10 +475,10 @@ if ($Export) {
         $parsed = Parse-Entry $line
 
         $output += ""
-        $output += "**$($parsed.Timestamp)** $($parsed.Text)"
+        $output += "**[$($parsed.Timestamp)]** $($parsed.Text)"
 
-        $hasAuthor = $parsed.Author -and $parsed.Author -ne "."
-        $hasSource = $parsed.Source -and $parsed.Source -ne "-"
+        $hasAuthor = [bool]$parsed.Author
+        $hasSource = [bool]$parsed.Source
 
         if ($hasAuthor -and $hasSource) {
             $output += "- Author: $($parsed.Author) | Source: $($parsed.Source)"
@@ -506,18 +508,8 @@ if ($PSBoundParameters.Count -eq 0) {
         exit 1
     }
 
-    $sourceInput = Read-Host "Source [-]"
-    if (-not $sourceInput) { $sourceInput = "-" }
-    $authorInput = Read-Host "Author [.]"
-    if (-not $authorInput) { $authorInput = "." }
-
-    $entry = "[$timestamp] $TextEntry"
-    if ($authorInput) { $entry += " [$authorInput]" }
-    if ($sourceInput) { $entry += " ($sourceInput)" }
-    $device = Get-UvidDevice
-    if ($device) { $entry += " {$device}" }
-
-    Write-Entry $entry
+    $s = Read-Host "Source [-]"
+    $a = Read-Host "Author [.]"
 } else {
     # Inline mode
     if (-not $TextEntry) {
@@ -531,11 +523,6 @@ if ($PSBoundParameters.Count -eq 0) {
         exit 1
     }
 
-    $entry = "[$timestamp] $TextEntry"
-    if ($a) { $entry += " [$a]" }
-    if ($s) { $entry += " ($s)" }
-    $device = Get-UvidDevice
-    if ($device) { $entry += " {$device}" }
-
-    Write-Entry $entry
 }
+
+Write-Entry (Format-Entry $timestamp $TextEntry $a $s (Get-UvidDevice))
