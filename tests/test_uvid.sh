@@ -567,6 +567,51 @@ test_search_hides_placeholders() {
     assert_not_contains "$(bash "$UVID" --search findme)" "[.]" "placeholder hidden in search"
 }
 
+# ---- Log store ----
+
+test_all_logs_orders_and_filters() {
+    source "$UVID"
+    touch 02-2025_uvid.log 01-2026_uvid.log ocr_01-2026_uvid.log 2026_uvid.log 01-2026_uvid.log.bak
+    assert_equals "$(all_logs | sed 's#.*/##' | tr '\n' ' ')" "02-2025_uvid.log 01-2026_uvid.log ocr_01-2026_uvid.log " \
+        "year before month, streams after main, yearly and .bak ignored"
+    assert_equals "$(all_logs 2025 | sed 's#.*/##')" "02-2025_uvid.log" "year filter"
+}
+
+test_replace_line_edits_and_deletes() {
+    source "$UVID"
+    printf 'a\\b\nsame\nsame\nlast' > "$LOG_FILE"
+    replace_line "same" 'new\n'
+    assert_equals "$(cat "$LOG_FILE")" $'a\\b\nnew\\n\nsame\nlast' "first match replaced, backslashes and unterminated last line kept"
+    replace_line "last"
+    assert_equals "$(cat "$LOG_FILE")" $'a\\b\nnew\\n\nsame' "delete when no replacement"
+    replace_line "missing" && local rc=0 || local rc=1
+    assert_equals "$rc" "1" "missing line reports failure"
+}
+
+test_list_merges_streams_by_timestamp() {
+    local my="${MONTH_YEAR/-/.}"
+    echo "[02.$my 09:00:00] main idea [.] (-)" > "$LOG_FILE"
+    echo "[01.$my 10:00:00] ocr idea [.] (telegram-ocr)" > "ocr_$LOG_FILE"
+    assert_equals "$(bash "$UVID" --list | tail -n 2)" "[01.$my 10:00:00] ocr idea (telegram-ocr)
+[02.$my 09:00:00] main idea" "ocr entry listed, ordered by timestamp"
+}
+
+test_delete_from_ocr_stream() {
+    local my="${MONTH_YEAR/-/.}"
+    echo "[02.$my 09:00:00] main idea [.] (-)" > "$LOG_FILE"
+    echo "[01.$my 10:00:00] ocr idea [.] (telegram-ocr)" > "ocr_$LOG_FILE"
+    printf "\n1\n\n" | bash "$UVID" --delete > /dev/null
+    assert_equals "$(cat "ocr_$LOG_FILE")" "" "ocr entry deleted from its own Log file"
+    assert_contains "$(cat "$LOG_FILE")" "main idea" "main stream untouched"
+}
+
+test_export_orders_across_years() {
+    echo "[01.01.2026 10:00] jan26 [.] (-)" > 01-2026_uvid.log
+    echo "[01.02.2025 10:00] feb25 [.] (-)" > 02-2025_uvid.log
+    bash "$UVID" --export > /dev/null
+    assert_equals "$(grep -o 'feb25\|jan26' uvid_export_*.md | tr '\n' ' ')" "feb25 jan26 " "export is chronological across years"
+}
+
 # ---- PowerShell adapter (uvid.cmd runs Windows PowerShell 5.1) ----
 
 PS=$(command -v powershell.exe || command -v powershell || true)
@@ -644,6 +689,11 @@ run_test test_closing_brackets_stripped_from_fields
 run_test test_inline_rejects_unknown_flag
 run_test test_list_hides_placeholders
 run_test test_search_hides_placeholders
+run_test test_all_logs_orders_and_filters
+run_test test_replace_line_edits_and_deletes
+run_test test_list_merges_streams_by_timestamp
+run_test test_delete_from_ocr_stream
+run_test test_export_orders_across_years
 if [ -n "$PS" ]; then
     run_test test_ps_args_survive_hop
     run_test test_ps_list_matches_bash

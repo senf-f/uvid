@@ -27,8 +27,12 @@ _Avoid_: host, machine name
 What makes two Entries the same across devices: timestamp + Device + position among Entries sharing that timestamp and Device. An Entry with matching identity but different text is an edit.
 _Avoid_: dedup key, ID
 
+**Stream**:
+A capture channel whose Entries are kept apart: the main stream (CLI and Telegram text), `voice`, and `ocr`.
+_Avoid_: channel, type
+
 **Log file**:
-All Entries for one calendar month.
+All Entries for one calendar month from one Stream. A month spans up to one Log file per Stream.
 _Avoid_: logfile, journal
 
 **Canonical store**:
