@@ -49,7 +49,7 @@ if [ -n "$DRY_RUN" ]; then
         echo "Would copy:"
         ls "$LOCAL_DIR"/*_uvid.log 2>/dev/null
     fi
-    echo "[dry-run] Would merge on VPS and pull back."
+    echo "[dry-run] Would merge on VPS and pull back logs and thread pages."
     exit 0
 fi
 
@@ -72,6 +72,21 @@ if [ -n "$HAVE_RSYNC" ]; then
     rsync -az "$VPS_USER@$VPS_HOST:$VPS_DIR"/*_uvid.log "$LOCAL_DIR/"
 else
     scp "$VPS_USER@$VPS_HOST:$VPS_DIR"/*_uvid.log "$LOCAL_DIR/"
+fi
+
+# Step 5: Mirror thread pages written by uvid-telegram-bot (VPS -> local only; read-only here)
+if ssh "$VPS_USER@$VPS_HOST" "test -d $VPS_DIR/threads"; then
+    echo "Pulling thread pages..."
+    mkdir -p "$LOCAL_DIR/threads"
+    if [ -n "$HAVE_RSYNC" ]; then
+        # Only *.md is managed; excluded files (e.g. .obsidian/) are protected from --delete.
+        rsync -az --delete --include='*.md' --exclude='*' \
+            "$VPS_USER@$VPS_HOST:$VPS_DIR/threads/" "$LOCAL_DIR/threads/"
+    else
+        # No rsync: clear and recopy so pages removed on the VPS disappear here too.
+        rm -f "$LOCAL_DIR/threads/"*.md
+        scp -q "$VPS_USER@$VPS_HOST:$VPS_DIR/threads/*.md" "$LOCAL_DIR/threads/"
+    fi
 fi
 
 echo "Sync complete."
