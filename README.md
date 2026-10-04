@@ -78,7 +78,7 @@ Manually trigger a sync with the VPS. Pushes local logs, merges with remote, pul
 
 Transfers use `rsync`, so unchanged log files (e.g. older monthly logs) are skipped instead of re-copied every sync. If `rsync` is not installed, sync falls back to `scp` (copying all files) and prints a warning.
 
-If the VPS runs [uvid-telegram-bot](https://github.com/senf-f/uvid-telegram-bot), `--sync` also mirrors its idea pages to `~/.uvid/threads/` (one Markdown page per entry with comments and branch links, plus `queue.md`). Pages (`*.md`) in that folder are replaced on every sync, so don't edit them; other files there (e.g. `.obsidian/`) are left alone. To keep your own notes alongside, open `~/.uvid` as the Obsidian vault and write notes outside `threads/`.
+If the VPS runs [uvid-telegram-bot](https://github.com/senf-f/uvid-telegram-bot), `--sync` also mirrors its idea pages to `~/.uvid/threads/` (one Markdown page per idea the bot has already sent as a reminder, with comments and branch links, plus `queue.md`). Pages (`*.md`) in that folder are replaced on every sync, so don't edit them; other files there (e.g. `.obsidian/`) are left alone. To keep your own notes alongside, open `~/.uvid` as the Obsidian vault and write notes outside `threads/`.
 
 **Merge semantics:**
 - New entries from any machine are preserved.
